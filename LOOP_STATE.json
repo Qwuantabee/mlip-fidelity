@@ -1,22 +1,18 @@
 {
   "project": "mlip-fidelity",
-  "repo": "https://github.com/Qwuantabee/mlip-fidelity (not yet created)",
+  "repo": "https://github.com/Qwuantabee/mlip-fidelity",
   "model": "opencode-go/deepseek-v4.1-flash",
-  "started": "2026-11-15T05:05:00-06:00",
-  "step": 7,
-  "step_name": "README",
-  "blocked_on": "full sweep running: sweep3 unit, 15232 conformers x mace_off_small + orb_orbmol_v1_conservative",
-  "next_action": "when sweep3 is inactive: run scripts/score.py, then scripts/make_figures.py",
-  "proven_so_far": {
-    "first_real_result": "MACE-OFF23 on 841 decided pairs: decision accuracy 0.723 (95% Wilson 0.692-0.752), median |dE| error 0.51 kcal/mol, null control p=0.005",
-    "bug_found_and_fixed": "SPICE conformations are in BOHR; treating them as Angstrom stretched every molecule 1.89x and produced a chance-level result (0.489 accuracy). Fixed; accuracy 0.489 -> 0.723."
+  "step": 4,
+  "step_name": "SWEEP (ORB re-run in progress)",
+  "blocked_on": "unit orb2: full ORB sweep, 39 chunks of 400 conformers, ~3 min/chunk",
+  "next_action": "when orb2 is inactive: python scripts/merge_chunks.py --model orb_orbmol_v1_conservative ; python scripts/score.py ; python scripts/make_figures.py ; update README numbers ; commit ; push",
+  "critical_note": "The ORB numbers now on GitHub (0.893 on 9409 pairs) are NOT reproducible: the committed raw_orb file holds only 1500 conformers, so that row was scored from a stale/partial artefact. It is being re-measured in full. Do not quote 0.893 until the re-run lands and the summary reproduces from the committed decision CSV.",
+  "proven_this_session": {
+    "mace_off_small": "0.732 (0.725-0.739) on 14065 decided pairs, median err 0.50 kcal, null p 0.005 - reproducible",
+    "rdkit_mmff": "0.563 (0.555-0.571) on 15578 pairs, median err 31.7 kcal, null p 0.005 - reproducible",
+    "bohr_bug": "SPICE coordinates are BOHR; treating as Angstrom gave chance-level accuracy (0.489). Fixed -> 0.723+"
   },
   "notes": [
-    "Data: SPICE 1.1.4, 16.06 GB, 19238 molecules, downloaded and byte-verified.",
-    "Pairs: 16089 decision pairs, 6607 biomolecular (dipeptides 6579, solvated amino acids 28), 404 charged molecules with charge/spin parsed from SMILES.",
-    "27 tests pass including archive-layout and unit tests that fail against the old reader.",
-    "Models proven on GPU: MACE-OFF23 small (~21s/800 conformers), ORB-omol, RDKit MMFF94 baseline.",
-    "Per-model venvs mandatory (fairchem e3nn 0.6 breaks MACE at eval time)."
-  ],
-  "checked_at": "2026-11-15T05:45:45-06:00"
+    "Rounding gaps to 6 dp flipped 28 near-zero MMFF signs and made the CSV disagree with the summary; score.py now writes full precision."
+  ]
 }

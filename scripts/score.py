@@ -64,8 +64,13 @@ def score_model(raw_path: Path, manifest: dict, scope: str) -> tuple[list[dict],
         rows.append({
             "model": model, "scope": scope, "molecule": p["molecule"],
             "subset": p["subset"], "id_a": p["id_a"], "id_b": p["id_b"],
-            "qm_gap_kcal": p["qm_gap_kcal"], "model_gap_kcal": round(gap_kcal, 6),
-            "error_kcal": round(gap_kcal - p["qm_gap_kcal"], 6),
+            # Full precision, NOT rounded to 6 dp. Rounding flipped the sign of
+            # 28 near-zero MMFF gaps and made the committed CSV reproduce 0.5615
+            # while the summary said 0.5633 - an apparent contradiction that took a
+            # recomputation to trace. A file whose job is to be re-scored must not
+            # lose the bits that decide the sign.
+            "qm_gap_kcal": p["qm_gap_kcal"], "model_gap_kcal": gap_kcal,
+            "error_kcal": gap_kcal - p["qm_gap_kcal"],
             "agree": agree,
         })
         qm_list.append(p["qm_gap_kcal"])
