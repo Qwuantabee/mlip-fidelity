@@ -66,8 +66,42 @@ def test_ion_charge_comes_from_smiles():
 
 
 def test_anion_charge_is_negative():
-    charge, _ = charge_and_multiplicity("[O-]C=O", [6, 8, 8, 1])
+    charge, spin = charge_and_multiplicity("[O-]C=O", [6, 8, 8, 1])
     assert charge == -1
+    # Formate has 24 electrons (odd count + the -1 charge): an even count, so the
+    # electron-count rule gives a singlet. Asserting a doublet here would have
+    # encoded a wrong expectation, not found a bug.
+    assert spin == 1
+
+
+def test_charge_parsing_works_without_rdkit():
+    """The CI runner has no RDKit, and that is how the original bug surfaced.
+
+    With RDKit absent, the old code fell into a bare `except: charge = 0` and ran
+    every ion as a neutral - a finite, wrong electronic state rather than an
+    error. This test removes RDKit from the import path and requires the charges
+    to survive.
+    """
+    import builtins
+    import importlib
+    real_import = builtins.__import__
+
+    def no_rdkit(name, *a, **k):
+        if name.startswith("rdkit"):
+            raise ImportError("simulated: no rdkit")
+        return real_import(name, *a, **k)
+
+    builtins.__import__ = no_rdkit
+    try:
+        import mlipfid.select as sel
+        importlib.reload(sel)
+        assert sel.charge_and_multiplicity("[NH4+]", [7, 1, 1, 1, 1])[0] == 1
+        assert sel.charge_and_multiplicity("[O-]C=O", [6, 8, 8, 1])[0] == -1
+        assert sel.charge_and_multiplicity("[Fe+2]", [26])[0] == 2
+        assert sel.charge_and_multiplicity("C", [6, 1, 1, 1, 1])[0] == 0
+    finally:
+        builtins.__import__ = real_import
+        importlib.reload(sel)
 
 
 def test_neutral_singlet_default():

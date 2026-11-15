@@ -75,6 +75,19 @@ def load_cached_chunk(path: Path, want_ids: list[str]) -> dict | None:
     return saved
 
 
+def chunk_failed_count(chunk: dict) -> int:
+    """True number of un-scored conformers in one chunk.
+
+    `failures` is truncated to 10 entries per chunk to keep payloads small, so its
+    length is NOT the failure count. Summing those truncated lengths made a run
+    with 319 NaN energies report n_failed=70. Prefer the chunk's own `n_failed`,
+    and fall back to the list length only for old chunks without the field.
+    """
+    if "n_failed" in chunk and chunk["n_failed"] is not None:
+        return int(chunk["n_failed"])
+    return len(chunk.get("failures", []))
+
+
 def check_merged_ids(ids: list[str]) -> None:
     """A merged result must score each conformer at most once."""
     if len(set(ids)) != len(ids):
@@ -158,6 +171,7 @@ def main() -> int:
         ids_all: list[str] = []
         energies_all: list[float] = []
         failures: list[dict] = []
+        n_failed_all = 0
         model_meta: dict = {}
         wall = 0.0
         ok = True
@@ -173,6 +187,7 @@ def main() -> int:
                 ids_all += saved["ids"]
                 energies_all += saved["energies_ev"]
                 failures += saved.get("failures", [])
+                n_failed_all += chunk_failed_count(saved)
                 model_meta = saved.get("meta", {})
                 wall += saved.get("wall_seconds", 0.0)
                 print(f"-- {model} chunk {ci+1}/{len(bounds)} (cached)", flush=True)
@@ -192,6 +207,7 @@ def main() -> int:
             ids_all += res["ids"]
             energies_all += res["energies_ev"]
             failures += res.get("failures", [])
+            n_failed_all += chunk_failed_count(res)
             model_meta = res.get("meta", {})
             wall += res.get("wall_seconds", 0.0)
         if not ok:
@@ -201,7 +217,7 @@ def main() -> int:
         merged = {"ok": True, "model": model, "meta": model_meta,
                   "ids": ids_all, "energies_ev": energies_all,
                   "n_ok": int(sum(1 for e in energies_all if e == e)),
-                  "n_failed": len(failures), "failures": failures[:10],
+                  "n_failed": n_failed_all, "failures": failures[:10],
                   "wall_seconds": wall}
         (out_dir / f"raw_{model}.json").write_text(json.dumps(merged) + "\n")
         print(f"   ok  n={merged['n_ok']} failed={merged['n_failed']} "

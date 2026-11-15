@@ -91,3 +91,22 @@ def test_merged_ids_must_be_unique(sweep):
     with pytest.raises(ValueError):
         sweep.check_merged_ids(["a", "b", "a"])
     sweep.check_merged_ids(["a", "b", "c"])   # must not raise
+
+
+def test_failed_count_is_the_true_nan_count_not_the_truncated_list(sweep):
+    """Second real bug: per-chunk failure lists are capped at 10 for payload size.
+
+    The merge summed the LENGTH OF THE TRUNCATED LISTS, so a run with 319 NaN
+    conformers reported n_failed=70 (10 per chunk x 7 chunks) and every downstream
+    table under-reported missing data by 4.5x. Each chunk file carries its own
+    true `n_failed`, so the merge must use that, and must still fall back to the
+    list length for older chunks that predate the field.
+    """
+    chunk_new = {"ok": True, "ids": ["a"], "energies_ev": [1.0],
+                 "n_failed": 88, "failures": [{"id": "x", "error": "boom"}] * 10,
+                 "meta": {}, "wall_seconds": 1.0}
+    chunk_old = {"ok": True, "ids": ["b"], "energies_ev": [2.0],
+                 "failures": [{"id": "y", "error": "boom"}] * 3,
+                 "meta": {}, "wall_seconds": 1.0}
+    assert sweep.chunk_failed_count(chunk_new) == 88
+    assert sweep.chunk_failed_count(chunk_old) == 3

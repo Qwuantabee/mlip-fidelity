@@ -59,6 +59,38 @@ def max_pairs_for(cap: int) -> int:
     return cap * (cap - 1) // 2
 
 
+def _charge_from_smiles_text(smiles: str) -> int:
+    """Net formal charge from bracket atoms, without RDKit.
+
+    Handles the SMILES forms that appear in SPICE: [NH4+], [O-], [CH3+], [Fe+2]
+    and multi-charge brackets such as [Ca+2]. Unbracketed atoms are neutral, so a
+    SMILES with no brackets correctly yields 0.
+    """
+    total = 0
+    for chunk in smiles.split("["):
+        if "]" not in chunk:
+            continue
+        body = chunk.split("]", 1)[0]
+        i = 0
+        while i < len(body):
+            if body[i] in "+-":
+                sign = 1 if body[i] == "+" else -1
+                j = i + 1
+                digits = ""
+                while j < len(body) and body[j].isdigit():
+                    digits += body[j]
+                    j += 1
+                total += sign * (int(digits) if digits else 1)
+                # a repeated sign ("++") also means magnitude 2
+                while j < len(body) and body[j] == body[i]:
+                    total += sign
+                    j += 1
+                i = j
+            else:
+                i += 1
+    return total
+
+
 def charge_and_multiplicity(smiles: str | None, atomic_numbers) -> tuple[int, int]:
     """Formal charge and spin multiplicity from a SMILES, without trusting it blindly.
 
@@ -76,8 +108,21 @@ def charge_and_multiplicity(smiles: str | None, atomic_numbers) -> tuple[int, in
             m = Chem.MolFromSmiles(smiles)
             if m is not None:
                 charge = int(Chem.GetFormalCharge(m))
-        except Exception:  # noqa: BLE001 - RDKit optional at scoring time
-            charge = 0
+        except ImportError:
+            # RDKit is absent: there is no way to read a formal charge, so fall
+            # back to a SMILES-only count of bracket charges. Returning 0 here
+            # would run every ion as a neutral, and the CI run proved that path
+            # exists: three charge tests failed simply because the runner has no
+            # RDKit. A missing dependency must be visible, not silently neutral.
+            charge = _charge_from_smiles_text(smiles)
+        except Exception:  # noqa: BLE001 - malformed SMILES
+            charge = _charge_from_smiles_text(smiles)
     n_electrons -= charge
     spin = 2 if (n_electrons % 2) else 1
+    # LIMIT, stated rather than hidden: an electron count only distinguishes
+    # closed-shell from open-shell. It cannot recover the ground-state
+    # multiplicity of a transition metal - real Fe2+ is d6 and a quintet, while
+    # this returns a singlet. SPICE molecules are organic (C/H/N/O/S/halogen) plus
+    # alkali/alkaline counter-ions, where parity is the correct answer; a metal
+    # complex would need a real spin-state determination and is out of scope.
     return charge, spin
