@@ -25,6 +25,7 @@ tests could not see it.
 """
 import csv
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,8 +53,11 @@ SPEC = {
 
 
 def _run(cmd):
-    return subprocess.run(cmd, capture_output=True, text=True,
-                          env={"PYTHONDONTWRITEBYTECODE": "1", "PATH": "/usr/bin:/bin"})
+    # Inherit the real environment and only add the flag. A hand-built
+    # {"PATH": "/usr/bin:/bin"} dict dropped VIRTUAL_ENV and PYTHONPATH, which
+    # made the subprocess use a different interpreter than the test process.
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)
 
 
 @pytest.fixture(scope="module")
@@ -175,6 +179,7 @@ def test_classical_baseline_reaches_the_scorer_in_the_right_unit(world):
     `run_model.py rdkit_mmff` and compares the scored model gap to RDKit's own
     kcal/mol difference, so a stored-kcal-labelled-eV defect fails here.
     """
+    pytest.importorskip("rdkit", reason="the classical-baseline unit check needs RDKit")
     from rdkit import Chem, RDLogger
     from rdkit.Chem import AllChem, rdDetermineBonds
     RDLogger.DisableLog("rdApp.*")
