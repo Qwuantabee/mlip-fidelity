@@ -2,8 +2,8 @@
   "project": "mlip-fidelity",
   "repo": "https://github.com/Qwuantabee/mlip-fidelity",
   "model": "opencode-go/deepseek-v4.1-flash",
-  "step": 4,
-  "step_name": "SWEEP - ORB re-run then publish",
+  "step": 45,
+  "step_name": "FINALIZE_PENDING",
   "next_action": "1) wait for unit orb2 to go inactive. 2) run: python scripts/finalize_orb.py  (merges chunks, refuses if incomplete, scores, regenerates figures). 3) if it succeeds, verify each published row recomputes from its decisions CSV, add the ORB row back to the README table and delete the withdrawal paragraph, update LOOP_STATE, commit, push. 4) if it refuses as INCOMPLETE, restart: systemctl --user reset-failed orb2 && systemd-run --user --collect --unit orb2 -p RuntimeMaxSec=18000 --working-directory=/home/ubuntu/biotech-portfolio/mlip-fidelity /tmp/orb2.sh",
   "published_and_verified": {
     "mace_off_small": "0.747 (0.740-0.753) n=15717, median err 0.45 kcal, null p 0.005",
@@ -14,5 +14,6 @@
     "Never publish a row whose decisions CSV does not recompute to its summary row.",
     "Never score a model absent from results/sweep_complete.json.",
     "A partial artefact is what produced the withdrawn ORB 0.893 - do not repeat it."
-  ]
+  ],
+  "checked_at": "2026-11-15T06:06:08-06:00"
 }

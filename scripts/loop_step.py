@@ -71,6 +71,28 @@ def spice_complete() -> bool:
     return "OK " in txt and "bytes == Content-Length" in txt
 
 
+
+def orb_coverage() -> float:
+    """Fraction of exported conformers the merged ORB artefact actually covers.
+
+    Existence is not completeness: a merge over 10 of 39 chunks writes a valid
+    raw_orb file holding a quarter of the conformers, which is exactly how the
+    withdrawn 0.893 got published. Coverage is the only honest test.
+    """
+    raw = ROOT / "results" / "raw_orb_orbmol_v1_conservative.json"
+    conf = ROOT / "results" / "conformers.jsonl"
+    if not conf.exists():
+        return 1.0
+    n_conf = sum(1 for _ in open(conf))
+    if not raw.exists():
+        return 0.0
+    try:
+        n_ok = json.loads(raw.read_text())["n_ok"]
+    except Exception:  # noqa: BLE001
+        return 0.0
+    return n_ok / max(n_conf, 1)
+
+
 def detect_step(st: dict) -> tuple[int, str]:
     """Ground truth wins over the recorded step: never trust a stale ledger."""
     if not spice_complete():
@@ -87,6 +109,11 @@ def detect_step(st: dict) -> tuple[int, str]:
     figs = list((ROOT / "figures").glob("*.png"))
     if len(figs) < 6:
         return 6, "FIGURES"
+    # A finished-looking repo is not finished while a model's sweep is unmerged.
+    # This must be checked before the "all files exist" verdict: the first version
+    # reported PUSH while ORB's re-run was still in flight.
+    if orb_coverage() < 0.95:
+        return 45, "FINALIZE_PENDING"
     if not (ROOT / "README.md").exists():
         return 7, "README"
     if not (ROOT / ".github" / "workflows" / "tests.yml").exists():
@@ -136,6 +163,10 @@ def main() -> int:
             out["next"] = (f"{PY} scripts/run_sweep.py --models mace_off_small "
                            "orb_orbmol_v1_conservative (extend the list as venvs "
                            "prove out)")
+    elif name == "FINALIZE_PENDING":
+        out["next"] = (f"{PY} scripts/finalize_orb.py   # merges ORB chunks and "
+                       "refuses to publish unless the raw covers >=95% of the "
+                       "conformers exported")
     elif name == "SCORE":
         out["next"] = f"{PY} scripts/score.py"
     elif name == "FIGURES":
