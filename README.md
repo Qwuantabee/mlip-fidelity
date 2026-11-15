@@ -71,10 +71,15 @@ Four things worth taking from that table.
 Pair orientation is arbitrary (whichever conformer happened to be index A), and
 the QM gaps are not symmetric: **always guessing "B is higher" scores 0.534** on
 these pairs. Against that constant, the excess over guessing is ORB **+0.366**,
-MACE **+0.212**, and MMFF **+0.067**. MMFF94 is barely above a coin flip once you
-subtract what the pair construction gives away for free — its 0.563 sounds more
-respectable than it is. The two ML models are carrying real signal; the classical
-force field is carrying almost none.
+MACE **+0.212**, and MMFF **+0.067**.
+
+MMFF94's edge is small but not noise: it beats the constant predictor on 4,125
+pairs and loses on 3,079 (McNemar-style sign test p ≈ 6e-35). So the classical
+force field does carry real signal on sub-kcal orderings — it just carries an
+order of magnitude less of it than either ML potential. The earlier version of
+this paragraph said "barely above a coin flip" against its pre-fix 0.563; that was
+both a stale number and the wrong conclusion, and I am correcting it rather than
+quietly deleting it.
 
 ## Why the null control matters
 
