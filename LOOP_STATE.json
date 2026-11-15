@@ -3,8 +3,8 @@
   "repo": "https://github.com/Qwuantabee/mlip-fidelity",
   "model": "opencode-go/deepseek-v4.1-flash",
   "step": 45,
-  "step_name": "FINALIZE_PENDING",
-  "next_action": "1) wait for unit orb2 to go inactive. 2) run: python scripts/finalize_orb.py  (merges chunks, refuses if incomplete, scores, regenerates figures). 3) if it succeeds, verify each published row recomputes from its decisions CSV, add the ORB row back to the README table and delete the withdrawal paragraph, update LOOP_STATE, commit, push. 4) if it refuses as INCOMPLETE, restart: systemctl --user reset-failed orb2 && systemd-run --user --collect --unit orb2 -p RuntimeMaxSec=18000 --working-directory=/home/ubuntu/biotech-portfolio/mlip-fidelity /tmp/orb2.sh",
+  "step_name": "FINALIZE_PENDING (ORB re-run in flight)",
+  "next_action": "On each fire run scripts/loop_step.py; while it returns 45 run scripts/finalize_orb.py. When the ORB raw covers >=95% of exported conformers finalize_orb.py merges, marks the model complete, scores and redraws; then verify each published row recomputes from its decisions CSV, add ORB back to the README table, delete the withdrawal paragraph, commit and push.",
   "published_and_verified": {
     "mace_off_small": "0.747 (0.740-0.753) n=15717, median err 0.45 kcal, null p 0.005",
     "rdkit_mmff": "0.563 (0.555-0.571) n=15578, median err 31.7 kcal, null p 0.005",
