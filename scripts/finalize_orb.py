@@ -36,8 +36,12 @@ def main() -> int:
     # completeness: the raw artefact must cover every conformer we exported
     n_conf = sum(1 for _ in open(ROOT / "results" / "conformers.jsonl"))
     print(f"raw n_ok={raw['n_ok']} of {n_conf} exported conformers")
-    if raw["n_ok"] < 0.95 * n_conf:
-        print("INCOMPLETE - not publishing; rerun the sweep to finish")
+    # 100%, not 95%: this is the same rule scripts/verify_completeness.py applies,
+    # and two writers with different rules is how the missing 5% - which are the
+    # hardest conformers - would have been published as complete.
+    if raw["n_ok"] < n_conf:
+        print(f"INCOMPLETE ({raw['n_ok']} of {n_conf}); not publishing - rerun the "
+              f"sweep to finish")
         return 1
     done = set(expected.get("complete", []))
     done.add(MODEL)

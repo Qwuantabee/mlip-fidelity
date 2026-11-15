@@ -158,7 +158,11 @@ def run_one(model: str, job: Path, out_dir: Path, device: str,
                 "stderr_tail": p.stderr[-1200:], "seconds": dt}
     payload["wall_seconds"] = dt
     payload["runner_rc"] = p.returncode
-    (out_dir / f"raw_{model}.json").write_text(json.dumps(payload) + "\n")
+    # NOT raw_<model>.json: that name means "this model is fully swept", and a
+    # single chunk written there made a crashed sweep look complete with ok: true
+    # (a code reviewer demonstrated it). The merged file is written once, by
+    # main(), after every chunk exists.
+    payload["partial"] = True
     return payload
 
 
@@ -183,7 +187,14 @@ def main() -> int:
         raise SystemExit(f"missing {conf_path}; run scripts/build_pairs.py first")
     recs = [json.loads(line) for line in conf_path.read_text().splitlines() if line.strip()]
     if args.limit:
+        # A --limit smoke run scores a PREFIX of the conformers; the merged file it
+        # writes covers only that prefix. Writing it under raw_<model>.json made a
+        # 400-conformer smoke test silently replace a 15,232-conformer production
+        # artefact (a reviewer demonstrated the clobber).
         recs = recs[:args.limit]
+        print(f"SMOKE RUN: scoring {len(recs)} of the exported conformers; the "
+              f"merged file will be written as raw_<model>.smoke.json and is NOT "
+              f"a production artefact", flush=True)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     lock_path = Path(args.lock) if args.lock else out_dir / ".sweep.lock"
@@ -254,7 +265,8 @@ def main() -> int:
                   "n_ok": int(sum(1 for e in energies_all if e == e)),
                   "n_failed": n_failed_all, "failures": failures[:10],
                   "wall_seconds": wall}
-        (out_dir / f"raw_{model}.json").write_text(json.dumps(merged) + "\n")
+        suffix = ".smoke.json" if args.limit else ".json"
+        (out_dir / f"raw_{model}{suffix}").write_text(json.dumps(merged) + "\n")
         print(f"   ok  n={merged['n_ok']} failed={merged['n_failed']} "
               f"{wall:.1f}s total", flush=True)
         summary[model] = {k: v for k, v in merged.items()
