@@ -120,7 +120,11 @@ def check_merged_ids(ids: list[str]) -> None:
 
 def venv_python(venv: str | None) -> str:
     if venv is None:
-        return "/home/ubuntu/.openclaw/workspace/venv/bin/python"
+        # sys.executable, not a hard-coded venv path: a fresh clone on another
+        # machine has no /home/ubuntu, and a reviewer could not rebuild the
+        # environment because of it.
+        import sys as _sys
+        return _sys.executable
     p = ROOT / "envs" / venv / "bin" / "python"
     if not p.exists():
         raise SystemExit(f"missing venv {p}; build it first")

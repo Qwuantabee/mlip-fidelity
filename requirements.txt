@@ -1,0 +1,18 @@
+# Pinned to the versions the committed artefacts were produced with.
+# These are the versions in results/SUMMARY.md provenance; a different numpy or
+# pandas can change groupby ordering and therefore figure layout.
+numpy==2.4.2
+pandas==3.0.1
+scipy==1.18.0
+matplotlib==3.11.0
+h5py==3.16.0
+# RDKit provides the classical MMFF94/UFF baseline and SMILES charge parsing.
+# Its CalcEnergy() returns KCAL/MOL - see scripts/run_model.py KCAL_PER_EV.
+rdkit==2026.09.2
+
+# The ML potentials are NOT in this file on purpose: they conflict with each other
+# (fairchem-core upgrades e3nn to 0.6, which silently breaks MACE checkpoint
+# loading at evaluation time). Each one lives in its own venv under envs/:
+#   envs/mace      pip install mace-torch==0.3.17
+#   envs/orb       pip install orb-models==0.7.0
+#   envs/fairchem  pip install fairchem-core
