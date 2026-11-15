@@ -49,12 +49,50 @@ def _table_rows(readme: str) -> dict[str, list[str]]:
     the old number survived in the prose below — so the test now reads the TABLE
     CELL, which is the number readers actually see first.
     """
+    # Only the FIRST table in the file -- the in-sample SPICE results. The README
+    # now also carries a held-out MPCONF196 table with the same model names, so an
+    # unscoped parse overwrote these rows with that table's cells and the test
+    # compared held-out 0.800 against the in-sample CSVs. Scoping is the fix; the
+    # assertion below is unchanged.
     rows = {}
+    started = False
     for line in readme.splitlines():
-        if not line.startswith("|") or line.startswith("|---") or "model" in line:
+        if line.startswith("|"):
+            started = True
+        elif started and not line.strip():
+            break                      # first blank line ends the first table
+        if not started:
+            continue
+        if line.startswith("|---") or "model" in line:
             continue
         cells = [c.strip() for c in line.strip("|").split("|")]
         if len(cells) < 5:
+            continue
+        name = cells[0].replace("*", "").strip()
+        for key, needle in (("orb_orbmol_v1_conservative", "ORB-omol"),
+                            ("mace_off_small", "MACE-OFF23"),
+                            ("rdkit_mmff", "MMFF94")):
+            if needle.lower() in name.lower():
+                rows[key] = cells
+    return rows
+
+
+def _heldout_rows(readme: str) -> dict[str, list[str]]:
+    """The MPCONF196 table, parsed the same way, so it is checked too."""
+    rows = {}
+    lines = readme.splitlines()
+    # find the held-out table by its header
+    start = next((i for i, l in enumerate(lines)
+                  if l.startswith("|") and "held out" in l.lower()), None)
+    if start is None:
+        return rows
+    for line in lines[start + 1:]:
+        if not line.startswith("|"):
+            break
+        if line.startswith("|---"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 4:
             continue
         name = cells[0].replace("*", "").strip()
         for key, needle in (("orb_orbmol_v1_conservative", "ORB-omol"),
@@ -173,3 +211,25 @@ def test_readme_headline_is_computed_not_handwritten(summary, readme):
             f"{model}: median error {err} kcal/mol is in the CSV but not the README")
         assert acc in readme, (
             f"{model}: accuracy {acc} is in the CSV but not the README")
+
+
+def test_heldout_table_matches_the_heldout_csv(readme):
+    """The MPCONF196 table must equal results/heldout_summary.csv.
+
+    Added with the held-out benchmark: a second results table is a second chance
+    for a number to rot, and the sub-kcal column is the one that carries the
+    contamination finding.
+    """
+    csv_path = ROOT / "results" / "heldout_summary.csv"
+    if not csv_path.exists():
+        pytest.skip("no heldout_summary.csv; run scripts/score_heldout.py")
+    import pandas as pd
+    ho = pd.read_csv(csv_path).set_index("model")
+    rows = _heldout_rows(readme)
+    assert rows, "could not find the MPCONF196 table in the README"
+    for model in ("orb_orbmol_v1_conservative", "mace_off_small", "rdkit_mmff"):
+        assert model in rows, f"{model} missing from the held-out table"
+        want = f"{ho.loc[model, 'acc_under_1kcal']:.3f}"
+        assert want in " ".join(rows[model]), (
+            f"held-out table row for {model} does not contain {want}: "
+            f"{rows[model]}")

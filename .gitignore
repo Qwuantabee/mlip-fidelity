@@ -7,3 +7,4 @@ __pycache__/
 .pytest_cache/
 results/_job_mace_off_small_*.json
 results/.sweep.lock
+results/_heldout_job.json

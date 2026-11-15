@@ -81,6 +81,57 @@ this paragraph said "barely above a coin flip" against its pre-fix 0.563; that w
 both a stale number and the wrong conclusion, and I am correcting it rather than
 quietly deleting it.
 
+## The held-out test: does any of this survive outside the training data?
+
+A reviewer established that two of the three models train on the data I was
+scoring them on — MACE-OFF23 on ~95% of SPICE v1, ORB-omol's OMol25 documenting
+SPICE2. So the table above measures **fidelity to their own training data**, not
+generalisation. Only MMFF94 was ever a clean row.
+
+So I built a genuinely held-out benchmark: **MPCONF196** (Řezáč 2018; references
+revised 2023 at PNO-LCCSD(T)-F12 quality) — 13 peptides and medium macrocycles,
+196 conformers, 183 reference pairs. Neither ML model has trained on it.
+
+The two sets ask different questions, so they are compared on the one slice where
+they overlap: pairs whose reference gap is under 1 kcal/mol, which is the *entire*
+SPICE set.
+
+| model | SPICE, in-sample (<1 kcal) | **MPCONF196, held out (<1 kcal)** | held-out median err | held-out, all gaps |
+|---|---|---|---|---|
+| ORB-omol v1 | 0.900 | **0.800** (0.63-0.90) | 0.49 | 0.967 |
+| MACE-OFF23 | 0.760 | **0.467** (0.30-0.64) | 1.36 | 0.814 |
+| MMFF94 | 0.601 | **0.600** (0.42-0.75) | 2.75 | 0.825 |
+
+**MACE-OFF23's sub-kcal accuracy collapses out of sample: 0.760 → 0.467** (14 of
+30 pairs; exact binomial against its in-sample rate, p = 0.0008). Its in-sample
+number was substantially training-set memory.
+
+**ORB-omol drops 0.900 → 0.800** but 24 of 30 pairs is too few to call that a
+real decline (p = 0.12) — the honest statement is "consistent with a drop of up to
+10 points, not demonstrated."
+
+**MMFF94 is unchanged: 0.601 → 0.600.** It never saw either dataset, which is a
+useful control: the harness is not simply harder.
+
+On the full held-out gap range (median 4.30 kcal/mol, up to 39.9 — far coarser
+than SPICE's sub-kcal window) ORB-omol reaches 0.967 and a 0.49 kcal/mol median
+error, MACE-OFF23 0.814 / 1.36, MMFF94 0.825 / 2.75. Bigger gaps are easier for
+everyone, which is the psychometric shape the SPICE set could only sample the
+bottom of.
+
+**What this costs the repo's claim.** The in-sample SPICE ranking survives, but
+the *size* of MACE's advantage over a classical force field was inflated by
+contamination, and on held-out sub-kcal pairs it is now indistinguishable from
+MMFF94 (0.467 vs 0.600, overlapping intervals at n = 30). The defensible
+statement is narrower than the one this README opened with: on truly unseen
+peptides, an ML potential (ORB-omol) still orders near-degenerate conformers
+better than a force field, and one that was trained on the test data does not.
+
+n = 30 sub-kcal pairs is the binding limitation here, and it is stated rather
+than buried: MPCONF196 was designed to span the whole gap range, not to flood the
+sub-kcal band. A follow-up should combine several held-out sets (Folmsbee,
+TorsionNet206) to reach a few hundred sub-kcal pairs.
+
 ## Why the null control matters
 
 Every accuracy above is checked against the answer-leaking failure mode: shuffle
