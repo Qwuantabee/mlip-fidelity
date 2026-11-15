@@ -94,9 +94,10 @@ def main() -> int:
 
     manifest = load_manifest(Path(args.manifest))
     out_dir = Path(args.out)
-    raw_files = sorted(Path().glob(args.raw_glob)) or \
-        sorted(Path(args.raw_glob.rsplit("/", 1)[0]).glob(
-            args.raw_glob.rsplit("/", 1)[1]))
+    glob_pattern = args.raw_glob
+    raw_files = sorted(Path().glob(glob_pattern)) if not glob_pattern.startswith("/") \
+        else sorted(Path(glob_pattern.rsplit("/", 1)[0]).glob(
+            glob_pattern.rsplit("/", 1)[1]))
     if not raw_files:
         raise SystemExit(f"no raw files matched {args.raw_glob}")
 

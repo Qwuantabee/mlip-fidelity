@@ -11,5 +11,5 @@
     "Per-model venvs are mandatory: fairchem-core upgrades e3nn to 0.6 which silently breaks MACE checkpoint loading (too many values to unpack) only at evaluation time.",
     "10 invariant tests in tests/test_decisions.py pass."
   ],
-  "checked_at": "2026-11-15T05:13:10-06:00"
+  "checked_at": "2026-11-15T05:15:51-06:00"
 }
