@@ -95,6 +95,8 @@ def main() -> int:
     ap.add_argument("--manifest", default=str(ROOT / "results" / "pairs_manifest.json"))
     ap.add_argument("--raw-glob", default=str(ROOT / "results" / "raw_*.json"))
     ap.add_argument("--out", default=str(ROOT / "results"))
+    ap.add_argument("--require-complete", action="store_true",
+                    help="only score models listed in results/sweep_complete.json")
     args = ap.parse_args()
 
     manifest = load_manifest(Path(args.manifest))
@@ -106,6 +108,19 @@ def main() -> int:
     # patterns, so the previous fallback raised NotImplementedError.
     raw_path = Path(args.raw_glob)
     raw_files = sorted(raw_path.parent.glob(raw_path.name))
+    # A model whose sweep is still in progress must not contribute a row: a
+    # partial artefact produces a real-looking accuracy on a fraction of the data,
+    # and that is exactly how the withdrawn ORB 0.893 got published. Only models
+    # named in results/sweep_complete.json may be scored; a missing file means
+    # nothing is considered complete and the summary will be empty rather than
+    # quietly partial.
+    complete_path = out_dir / "sweep_complete.json"
+    if args.require_complete:
+        if not complete_path.exists():
+            raise SystemExit(f"{complete_path} missing; no model is marked complete")
+        done = set(json.loads(complete_path.read_text())["complete"])
+        raw_files = [p for p in raw_files
+                     if json.loads(p.read_text()).get("model") in done]
     if not raw_files:
         raise SystemExit(f"no raw files matched {args.raw_glob}")
 

@@ -110,3 +110,32 @@ def test_failed_count_is_the_true_nan_count_not_the_truncated_list(sweep):
                  "meta": {}, "wall_seconds": 1.0}
     assert sweep.chunk_failed_count(chunk_new) == 88
     assert sweep.chunk_failed_count(chunk_old) == 3
+
+
+def test_runner_takes_its_own_lock_so_wrappers_cannot_bypass_it(sweep):
+    """Third real bug: the mutual exclusion lived in scripts/sweep_all.sh only.
+
+    A stale /tmp/orb2.sh launcher called run_sweep.py DIRECTLY with --chunk 400
+    while a --chunk 1500 sweep was running, and both wrote into results/. Because
+    a chunk file named for slice (0,400) and one named (0,1500) are different
+    files, the slice-keyed cache did not stop them colliding in the MERGED file:
+    the second process truncated raw_orb_*.json to its own 400-row partial while
+    the other was still going. The lock has to travel with the script that
+    writes, not with one of the wrappers that calls it.
+    """
+    assert hasattr(sweep, "acquire_run_lock"), (
+        "run_sweep must take the lock itself, not rely on a shell wrapper")
+
+
+def test_second_concurrent_run_is_refused(sweep, tmp_path):
+    lock = tmp_path / "sweep.lock"
+    first = sweep.acquire_run_lock(lock, blocking=False)
+    assert first is not None
+    try:
+        second = sweep.acquire_run_lock(lock, blocking=False)
+        assert second is None, "a second concurrent sweep was allowed to start"
+    finally:
+        first.close()
+    third = sweep.acquire_run_lock(lock, blocking=False)
+    assert third is not None, "lock was not released"
+    third.close()

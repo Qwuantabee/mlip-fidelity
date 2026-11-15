@@ -18,6 +18,7 @@ Design constraints that came from real failures:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import subprocess
 import sys
@@ -37,6 +38,28 @@ MODELS = {
     "rdkit_mmff": None,         # shared venv: rdkit is not torch-dependent
     "rdkit_uff": None,
 }
+
+
+def acquire_run_lock(path: Path, blocking: bool = False):
+    """Take an exclusive lock on `results/`, or return None if another run holds it.
+
+    Mutual exclusion used to live only in scripts/sweep_all.sh. A stale
+    /tmp/orb2.sh launcher called this script DIRECTLY with --chunk 400 while a
+    --chunk 1500 sweep was mid-run; each wrote its own merged raw_<model>.json
+    from a partial view, so the published orb file held 400 of 15232 conformers.
+    The lock must belong to the process that writes results, not to a wrapper.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(path, "w")
+    flags = fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB)
+    try:
+        fcntl.flock(fh.fileno(), flags)
+    except OSError:
+        fh.close()
+        return None
+    fh.write(str(__import__("os").getpid()))
+    fh.flush()
+    return fh
 
 
 def chunk_bounds(n: int, chunk: int) -> list[tuple[int, int]]:
@@ -146,6 +169,8 @@ def main() -> int:
     ap.add_argument("--chunk", type=int, default=2000,
                     help="conformers per subprocess; bounds peak memory (a single "
                          "15k-conformer job plus torch OOM-killed this box)")
+    ap.add_argument("--lock", default=None,
+                    help="lock file guarding results/ (default results/.sweep.lock)")
     args = ap.parse_args()
 
     models = args.models or list(MODELS)
@@ -157,6 +182,12 @@ def main() -> int:
         recs = recs[:args.limit]
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = Path(args.lock) if args.lock else out_dir / ".sweep.lock"
+    lock = acquire_run_lock(lock_path, blocking=False)
+    if lock is None:
+        print(f"another sweep holds {lock_path}; refusing to start a duplicate",
+              flush=True)
+        return 75
     print(f"{len(recs)} conformers, models: {models}, "
           f"chunks of {args.chunk}", flush=True)
 

@@ -21,26 +21,28 @@ reference energies differ by **less than 1 kcal/mol** — and ask each model:
 
 | model | licence | decided pairs | **decision accuracy** (95% CI) | median \|ΔE\| error | null control p |
 |---|---|---|---|---|---|
-| **ORB-omol v1** | Apache-2.0 | 9,409 | **0.893** (0.887–0.899) | 0.15 kcal/mol | 0.005 |
-| **MACE-OFF23 (small)** | weights ASL, code MIT | 14,065 | **0.732** (0.725–0.739) | 0.50 kcal/mol | 0.005 |
+| **MACE-OFF23 (small)** | weights ASL, code MIT | 15,717 | **0.747** (0.740–0.753) | 0.45 kcal/mol | 0.005 |
 | MMFF94 (classical) | BSD | 15,578 | 0.563 (0.555–0.571) | 31.7 kcal/mol | 0.005 |
+
+*(ORB-omol v1 is being re-measured: an earlier row was scored from a stale
+partial artefact and is withdrawn until its number reproduces from the committed
+decision CSV. See "What went wrong" below.)*
 
 Three things worth taking from that table.
 
-1. **The best model still reverses 1 decision in 9.** A 0.15 kcal/mol median error
-   sounds perfect against a 1 kcal/mol bar, and it is not: 10.7% of
-   near-degenerate pairs come out backwards.
+1. **A small energy error does not mean the decisions are right.** MACE-OFF23's
+   median error is 0.45 kcal/mol — under half the 1 kcal/mol bar — and
+   it still gets 25.3% of near-degenerate pairs wrong.
 
 2. **Accuracy and error size are not the same axis.** MMFF94's median error is
-   200× ORB's, yet it still orders 56% of pairs correctly — barely above chance,
-   but far from the 0% a 32 kcal/mol error might suggest. Conversely a small
-   error does not guarantee a correct ordering. That is the whole point of
-   scoring decisions separately, and it is invisible on an MAE leaderboard.
+   63× MACE's, yet it still orders 56% of pairs correctly — barely above chance,
+   but far from the 0% a 32 kcal/mol error might suggest. Conversely a small error
+   does not guarantee a correct ordering. That is the whole point of scoring
+   decisions separately, and it is invisible on an MAE leaderboard.
 
-3. **The biomolecular slice is harder for both ML models.** MACE-OFF23 drops
-   from 0.732 overall to **0.639** on peptides and solvated amino acids;
-   ORB-omol drops from 0.893 to **0.846**. The chemistry a protein engineer cares
-   about is where these models are weakest — see
+3. **The biomolecular slice is harder.** MACE-OFF23 drops from 0.747 overall to
+   **0.636** on peptides and solvated amino acids — the chemistry a protein
+   engineer cares about is where this model is weakest. See
    [`figures/accuracy_by_subset.png`](figures/accuracy_by_subset.png).
 
 ![Accuracy with confidence intervals](figures/accuracy_ci.png)
@@ -49,9 +51,9 @@ Three things worth taking from that table.
 
 Every accuracy above is checked against the answer-leaking failure mode: shuffle
 which model gap is paired with which quantum gap, 200 times. If a pipeline is
-leaking, shuffled pairs score as well as real ones. Every model's shuffled
-accuracy collapses to chance (p = 0.005 for all three), which is what makes the
-numbers above mean anything.
+leaking, shuffled pairs score as well as real ones. Shuffled accuracy collapses
+to chance (p = 0.005 for every model reported), which is what makes the numbers
+above mean anything.
 
 ![Null control](figures/error_vs_gap.png)
 
@@ -121,6 +123,14 @@ classical baseline that "succeeded" with no bonds at all in the molecule
 (`SanitizeMol` on a bondless RWMol is happy to do nothing), and a licence table
 that called MACE's non-commercial weights permissive after a rewording. Each has
 a test or a committed note; the commit messages carry the evidence.
+
+**A withdrawn number, on purpose.** An earlier revision of this README reported
+ORB-omol v1 at 0.893. That row had been scored from a committed artefact holding
+1,500 conformers while claiming 9,409 decided pairs — a stale file, not a result.
+Recomputing every published row from the decision CSVs is what caught it, and the
+row is withdrawn until the full re-measurement reproduces. It is written here
+rather than quietly deleted because a repo that only shows its successes teaches
+the reader nothing about how far to trust it.
 
 ## Limits, stated plainly
 
