@@ -1,6 +1,6 @@
 # Do machine-learned potentials preserve the chemical decisions?
 
-**Energy error does not tell you whether a potential will order two near-degenerate conformers correctly: on 16,089 real quantum pairs, the best model here still reverses 1 decision in 10 while a force field with 200× its energy error gets more than half of them right.**
+**Energy error does not tell you whether a potential will order two near-degenerate conformers correctly: on 16,089 real quantum pairs, the best model here still reverses 1 decision in 10, while a force field with 206× its energy error still gets more than half of them right.**
 
 ![Decision accuracy vs gap error](figures/fidelity_vs_error.png)
 
