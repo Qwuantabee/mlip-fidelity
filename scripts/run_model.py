@@ -46,13 +46,13 @@ def build_calculator(model: str, device: str = "cuda"):
     if model == "mace_off_small" or model == "mace_off_medium":
         from mace.calculators import mace_off
         size = model.rsplit("_", 1)[1]
-        calc = mace_off(model=size, device=device, default_dtype="float32")
+        calc = mace_off(model=size, device=device, default_dtype="float64")
         return calc, {"model": model, "family": "MACE-OFF23",
                       "licence": "weights ASL (non-commercial); code MIT",
                       "device": device}
     if model == "mace_mp_small":
         from mace.calculators import mace_mp
-        calc = mace_mp(model="small", device=device, default_dtype="float32")
+        calc = mace_mp(model="small", device=device, default_dtype="float64")
         return calc, {"model": model, "family": "MACE-MP-0",
                       "licence": "MIT", "device": device}
     if model.startswith("orb"):
@@ -107,12 +107,21 @@ def energies_classical(kind: str, records):
             m.AddConformer(conf)
             mol = m.GetMol()
             rdDetermineBonds.DetermineBonds(mol, charge=int(rec.get("charge", 0)))
+            # ignoreInterfragInteractions=False is required, not cosmetic. RDKit
+            # defaults to True, which drops every non-bonded term between two
+            # disconnected fragments - and for the DES370K dimers and the ion-pair
+            # distance scans that discarded term is the ONLY thing that changes
+            # between conformers. With the default, 255 MMFF pairs had an exactly
+            # zero gap and ion_pairs scored 0.000; disabling it moves MMFF 0.563 ->
+            # 0.601 and the multi-fragment pairs 0.481 -> 0.692.
             if kind == "rdkit_mmff":
                 props = AllChem.MMFFGetMoleculeProperties(mol)
-                ff = (AllChem.MMFFGetMoleculeForceField(mol, props)
+                ff = (AllChem.MMFFGetMoleculeForceField(
+                          mol, props, ignoreInterfragInteractions=False)
                       if props is not None else None)
             else:
-                ff = AllChem.UFFGetMoleculeForceField(mol)
+                ff = AllChem.UFFGetMoleculeForceField(
+                    mol, ignoreInterfragInteractions=False)
             # RDKit's CalcEnergy() returns KCAL/MOL, not eV. The first version
             # stored it under the "energies_ev" key, and score.py then treated it as
             # eV and divided by 27.211386 to get kcal/mol - inflating every MMFF gap

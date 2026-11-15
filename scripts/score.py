@@ -50,11 +50,18 @@ def score_model(raw_path: Path, manifest: dict, scope: str) -> tuple[list[dict],
     model = raw["model"]
     emap = energy_map(raw)
     rows, qm_list, ml_list = [], [], []
+    absent = 0
     for p in manifest["pairs"]:
         if scope == "bio" and not p["is_bio"]:
             continue
         ea, eb = emap.get(p["id_a"]), emap.get(p["id_b"])
         if ea is None or eb is None:
+            # A NaN is a scored-and-failed conformer; ABSENT means this raw file
+            # was produced from a different pair set than the manifest. The two must
+            # not be conflated: an absent id used to be skipped silently, so scoring
+            # a 12,242-pair manifest against 16,089-pair raw files reported a
+            # believable accuracy on the 4,261 pairs that happened to overlap.
+            absent += 1
             continue
         # model gap in eV -> kcal/mol, sign preserved: E(B) - E(A)
         gap_ev = eb - ea
@@ -81,7 +88,7 @@ def score_model(raw_path: Path, manifest: dict, scope: str) -> tuple[list[dict],
     if len(qm) >= 5:
         stats.update({f"null_{k}": v for k, v in
                       null_control(ml, qm, n_shuffle=200).items()})
-    stats.update({"model": model, "scope": scope,
+    stats.update({"n_pairs_absent_from_raw": absent, "model": model, "scope": scope,
                   "family": raw.get("meta", {}).get("family", "?"),
                   "licence": raw.get("meta", {}).get("licence", "?"),
                   "wall_seconds": raw.get("wall_seconds"),

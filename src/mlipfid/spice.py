@@ -148,9 +148,13 @@ def read_molecule(g: h5py.Group, key: str) -> Molecule:
         forces = None
         for fname in ("dft_total_gradient", "forces"):
             if fname in g:
-                # gradient w.r.t. position in Hartree/bohr; force IS -gradient,
-                # but we keep magnitude in Hartree/angstrom for downstream use.
-                forces = -np.asarray(g[fname], dtype=float) * BOHR2ANG
+                # gradient w.r.t. position in Hartree/bohr; force IS -gradient.
+                # A force per BOHR becomes a force per ANGSTROM by DIVIDING by
+                # BOHR2ANG (x1.8897), not multiplying: the old `* BOHR2ANG` was
+                # wrong by 0.529^2 = 0.28. Nothing downstream reads forces today, so
+                # no published number was affected - but a future consumer would
+                # have been silently off by 3.6x.
+                forces = -np.asarray(g[fname], dtype=float) / BOHR2ANG
                 break
         confs = [
             Conformer(z, pos[i], float(energies[i]),

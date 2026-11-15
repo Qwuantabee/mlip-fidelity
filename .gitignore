@@ -6,3 +6,4 @@ __pycache__/
 *.pyc
 .pytest_cache/
 results/_job_mace_off_small_*.json
+results/.sweep.lock

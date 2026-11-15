@@ -108,6 +108,14 @@ def charge_and_multiplicity(smiles: str | None, atomic_numbers) -> tuple[int, in
             m = Chem.MolFromSmiles(smiles)
             if m is not None:
                 charge = int(Chem.GetFormalCharge(m))
+            else:
+                # MolFromSmiles returns None for an unparseable SMILES instead of
+                # raising, so the except branch never fired and an ion with a
+                # malformed string was silently run as a neutral. A reviewer caught
+                # this: charge_and_multiplicity('[NH4+]C((', ...) returned 0 although
+                # the text parser gives +1. Checked on the real data: 0 of 1,588
+                # molecules are affected, so no published number moves.
+                charge = _charge_from_smiles_text(smiles)
         except ImportError:
             # RDKit is absent: there is no way to read a formal charge, so fall
             # back to a SMILES-only count of bracket charges. Returning 0 here

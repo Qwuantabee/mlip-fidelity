@@ -1,15 +1,15 @@
 {
-  "rdkit_mmff": {
+  "mace_off_small": {
     "ok": true,
-    "model": "rdkit_mmff",
+    "model": "mace_off_small",
     "meta": {
-      "model": "rdkit_mmff",
-      "family": "classical force field",
-      "licence": "BSD",
-      "device": "cpu"
+      "model": "mace_off_small",
+      "family": "MACE-OFF23",
+      "licence": "weights ASL (non-commercial); code MIT",
+      "device": "cuda"
     },
-    "n_ok": 14763,
-    "n_failed": 0,
-    "wall_seconds": 17.711718559265137
+    "n_ok": 14913,
+    "n_failed": 319,
+    "wall_seconds": 318.6073522567749
   }
 }

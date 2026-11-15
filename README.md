@@ -1,6 +1,6 @@
 # Do machine-learned potentials preserve the chemical decisions?
 
-**On sub-kcal/mol conformer pairs, sign accuracy is a steep and predictable function of pair-gap error: a median error of 0.15 kcal/mol gets 90% of orderings right, 0.45 gets 75%, and 1.35 gets 56%. Error does predict the decision — but only if you compare it to the gap you are trying to resolve, not to a leaderboard MAE.**
+**On sub-kcal/mol conformer pairs, sign accuracy is a steep and predictable function of pair-gap error: a median error of 0.15 kcal/mol gets 90% of orderings right, 0.45 gets 76%, and 1.61 gets 60%. Error does predict the decision — but only if you compare it to the gap you are trying to resolve, not to a leaderboard MAE.**
 
 ![Decision accuracy vs gap error](figures/fidelity_vs_error.png)
 
@@ -27,8 +27,8 @@ lower?* Score the sign. Compare that to the model's own energy error.
 | model | licence | scored conformers | decided pairs | **decision accuracy** (95% CI) | median \|ΔE\| error | null control p |
 |---|---|---|---|---|---|---|
 | **ORB-omol v1 (conservative)** | Apache-2.0 | 15,232 | 15,991 | **0.900** (0.895–0.905) | 0.15 kcal/mol | 0.005 |
-| MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.747** (0.740–0.753) | 0.45 kcal/mol | 0.005 |
-| MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.563 (0.555–0.571) | 1.35 kcal/mol | 0.005 |
+| MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.760** (0.753–0.766) | 0.45 kcal/mol | 0.005 |
+| MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.601 (0.594–0.609) | 1.61 kcal/mol | 0.005 |
 
 All three rows are recomputed from the committed `results/decisions_*.csv` by
 `scripts/score.py`, and a model only appears here if
@@ -50,8 +50,8 @@ Four things worth taking from that table.
 
 3. **Accuracy tracks error, and the ordering is unambiguous.** With the classical
    baseline's units corrected (see "What went wrong"), the three models are
-   monotone in *every* error measure: median gap error 0.15 / 0.45 / 1.35 kcal/mol
-   gives accuracy 0.900 / 0.747 / 0.563. Pairwise differences are robust to
+   monotone in *every* error measure: median gap error 0.15 / 0.45 / 1.61 kcal/mol
+   gives accuracy 0.900 / 0.760 / 0.601. Pairwise differences are robust to
    clustering by molecule — ORB−MACE +0.157 [0.149, 0.166], MACE−MMFF +0.185
    [0.174, 0.197] — so this is not a tie. **I do not fit a trend line:** three
    points cannot distinguish a curve from a coincidence, and an earlier draft of
@@ -59,7 +59,7 @@ Four things worth taking from that table.
    refuted.
 
 4. **The biomolecular slice is consistently harder.** Every model drops on
-   peptides and solvated amino acids: ORB 0.900 → **0.855**, MACE 0.747 → **0.636**,
+   peptides and solvated amino acids: ORB 0.900 → **0.855**, MACE 0.760 → **0.647**,
    MMFF94 0.563 → 0.552. See
    [`figures/accuracy_by_subset.png`](figures/accuracy_by_subset.png). Part of that
    is composition, not chemistry — see Limits.
@@ -71,7 +71,7 @@ Four things worth taking from that table.
 Pair orientation is arbitrary (whichever conformer happened to be index A), and
 the QM gaps are not symmetric: **always guessing "B is higher" scores 0.534** on
 these pairs. Against that constant, the excess over guessing is ORB **+0.366**,
-MACE **+0.212**, and MMFF **+0.029**. MMFF94 is barely above a coin flip once you
+MACE **+0.212**, and MMFF **+0.067**. MMFF94 is barely above a coin flip once you
 subtract what the pair construction gives away for free — its 0.563 sounds more
 respectable than it is. The two ML models are carrying real signal; the classical
 force field is carrying almost none.
@@ -245,7 +245,7 @@ non-commercial weights permissive after a rewording.
 - **MACE-OFF23 shows float32 precision loss on these molecules.** Its absolute
   energies sit near −28,000 eV, where float32 resolution is ~0.045 kcal/mol; 441
   scored pairs (2.8% of decided ones) have a model gap of *exactly* zero and are
-  counted as wrong. Excluding them moves MACE 0.747 → 0.768, so the headline
+  counted as wrong. Excluding them moves MACE 0.760 → 0.768, so the headline
   number is the conservative one.
 - **The subset split is mine.** SPICE's `subset` labels are read from the archive,
   but the biomolecular / small-molecule grouping is a choice I made; the headline
