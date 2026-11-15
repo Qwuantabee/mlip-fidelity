@@ -66,6 +66,16 @@ Four things worth taking from that table.
 
 ![Accuracy with confidence intervals](figures/accuracy_ci.png)
 
+### The baseline that makes MMFF's number honest
+
+Pair orientation is arbitrary (whichever conformer happened to be index A), and
+the QM gaps are not symmetric: **always guessing "B is higher" scores 0.534** on
+these pairs. Against that constant, the excess over guessing is ORB **+0.366**,
+MACE **+0.212**, and MMFF **+0.029**. MMFF94 is barely above a coin flip once you
+subtract what the pair construction gives away for free — its 0.563 sounds more
+respectable than it is. The two ML models are carrying real signal; the classical
+force field is carrying almost none.
+
 ## Why the null control matters
 
 Every accuracy above is checked against the answer-leaking failure mode: shuffle
