@@ -3,16 +3,16 @@
   "repo": "https://github.com/Qwuantabee/mlip-fidelity",
   "model": "opencode-go/deepseek-v4.1-flash",
   "step": 4,
-  "step_name": "SWEEP (ORB re-run in progress)",
-  "blocked_on": "unit orb2: full ORB sweep, 39 chunks of 400 conformers, ~3 min/chunk",
-  "next_action": "when orb2 is inactive: python scripts/merge_chunks.py --model orb_orbmol_v1_conservative ; python scripts/score.py ; python scripts/make_figures.py ; update README numbers ; commit ; push",
-  "critical_note": "The ORB numbers now on GitHub (0.893 on 9409 pairs) are NOT reproducible: the committed raw_orb file holds only 1500 conformers, so that row was scored from a stale/partial artefact. It is being re-measured in full. Do not quote 0.893 until the re-run lands and the summary reproduces from the committed decision CSV.",
-  "proven_this_session": {
-    "mace_off_small": "0.732 (0.725-0.739) on 14065 decided pairs, median err 0.50 kcal, null p 0.005 - reproducible",
-    "rdkit_mmff": "0.563 (0.555-0.571) on 15578 pairs, median err 31.7 kcal, null p 0.005 - reproducible",
-    "bohr_bug": "SPICE coordinates are BOHR; treating as Angstrom gave chance-level accuracy (0.489). Fixed -> 0.723+"
+  "step_name": "SWEEP - ORB re-run then publish",
+  "next_action": "1) wait for unit orb2 to go inactive. 2) run: python scripts/finalize_orb.py  (merges chunks, refuses if incomplete, scores, regenerates figures). 3) if it succeeds, verify each published row recomputes from its decisions CSV, add the ORB row back to the README table and delete the withdrawal paragraph, update LOOP_STATE, commit, push. 4) if it refuses as INCOMPLETE, restart: systemctl --user reset-failed orb2 && systemd-run --user --collect --unit orb2 -p RuntimeMaxSec=18000 --working-directory=/home/ubuntu/biotech-portfolio/mlip-fidelity /tmp/orb2.sh",
+  "published_and_verified": {
+    "mace_off_small": "0.747 (0.740-0.753) n=15717, median err 0.45 kcal, null p 0.005",
+    "rdkit_mmff": "0.563 (0.555-0.571) n=15578, median err 31.7 kcal, null p 0.005",
+    "bio_slice_mace": "0.636 (0.625-0.648) n=6538"
   },
-  "notes": [
-    "Rounding gaps to 6 dp flipped 28 near-zero MMFF signs and made the CSV disagree with the summary; score.py now writes full precision."
+  "rules": [
+    "Never publish a row whose decisions CSV does not recompute to its summary row.",
+    "Never score a model absent from results/sweep_complete.json.",
+    "A partial artefact is what produced the withdrawn ORB 0.893 - do not repeat it."
   ]
 }
