@@ -1,15 +1,21 @@
 {
   "project": "mlip-fidelity",
+  "repo": "https://github.com/Qwuantabee/mlip-fidelity (not yet created)",
   "model": "opencode-go/deepseek-v4.1-flash",
   "started": "2026-11-15T05:05:00-06:00",
-  "step": 1,
-  "step_name": "DOWNLOAD",
-  "blocked_on": "SPICE archive fetching (~47% at first arm)",
-  "next_action": "check spice-par unit; on complete run build_pairs.py",
+  "step": 4,
+  "step_name": "SWEEP",
+  "blocked_on": "full sweep running: sweep3 unit, 15232 conformers x mace_off_small + orb_orbmol_v1_conservative",
+  "next_action": "when sweep3 is inactive: run scripts/score.py, then scripts/make_figures.py",
+  "proven_so_far": {
+    "first_real_result": "MACE-OFF23 on 841 decided pairs: decision accuracy 0.723 (95% Wilson 0.692-0.752), median |dE| error 0.51 kcal/mol, null control p=0.005",
+    "bug_found_and_fixed": "SPICE conformations are in BOHR; treating them as Angstrom stretched every molecule 1.89x and produced a chance-level result (0.489 accuracy). Fixed; accuracy 0.489 -> 0.723."
+  },
   "notes": [
-    "Feasibility proven: MACE-OFF23 and ORB-omol both evaluate on the RTX 5070 Ti and give monotone energies under geometric distortion (physical sanity).",
-    "Per-model venvs are mandatory: fairchem-core upgrades e3nn to 0.6 which silently breaks MACE checkpoint loading (too many values to unpack) only at evaluation time.",
-    "10 invariant tests in tests/test_decisions.py pass."
-  ],
-  "checked_at": "2026-11-15T05:15:51-06:00"
+    "Data: SPICE 1.1.4, 16.06 GB, 19238 molecules, downloaded and byte-verified.",
+    "Pairs: 16089 decision pairs, 6607 biomolecular (dipeptides 6579, solvated amino acids 28), 404 charged molecules with charge/spin parsed from SMILES.",
+    "27 tests pass including archive-layout and unit tests that fail against the old reader.",
+    "Models proven on GPU: MACE-OFF23 small (~21s/800 conformers), ORB-omol, RDKit MMFF94 baseline.",
+    "Per-model venvs mandatory (fairchem e3nn 0.6 breaks MACE at eval time)."
+  ]
 }

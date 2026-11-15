@@ -72,53 +72,47 @@ def build_calculator(model: str, device: str = "cuda"):
             "model": model, "family": "ORB", "trained_on": trained_on,
             "checkpoint": fn_name,
             "licence": "ASL 3.0", "device": device}
-    if model == "rdkit_uff":
-        from rdkit import Chem
-        from rdkit.Chem import AllChem
-        return "UFF", {"model": "rdkit_uff", "family": "classical force field",
+    if model in ("rdkit_mmff", "rdkit_uff"):
+        return model, {"model": model, "family": "classical force field",
                        "licence": "BSD", "device": "cpu"}
     raise RuntimeError(f"unknown model {model}")
 
 
-def energies_uff(atoms, records, datums):
-    """Classical baseline: build an RDKit molecule from the geometry and relax-free
-    single-point UFF energy. Needs bonds, which come from RDKit's perception."""
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-    import numpy as np
+def energies_classical(kind: str, records):
+    """Classical baseline: MMFF94 (or UFF) single-point energy on perceived bonds.
+
+    The first version called UFF directly on a molecule built with atoms but no
+    bonds, which silently produced no energy at all (n=0 scored). Bonds must be
+    perceived from the geometry: `Chem.SanitizeMol` on a bondless RWMol succeeds
+    with zero bonds, so the failure was silent rather than loud. rdDetermineBonds
+    is what actually assigns connectivity here (52 bonds on a 49-atom dipeptide),
+    and only then does a force field have anything to compute.
+    """
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem import AllChem, rdDetermineBonds
+    RDLogger.DisableLog("rdApp.*")
     out = []
     for rec in records:
-        mol = Chem.RWMol()
-        for z in rec["atomic_numbers"]:
-            mol.AddAtom(Chem.Atom(int(z)))
-        conf = Chem.Conformer(mol.GetNumAtoms())
-        for i, xyz in enumerate(rec["positions"]):
-            conf.SetAtomPosition(i, tuple(float(v) for v in xyz))
-        mol.AddConformer(conf)
-        m = mol.GetMol()
-        Chem.SanitizeMol(m)
-        if not _uff_ok(m):
-            from rdkit.Chem import rdDetermineBonds
-            try:
-                rdDetermineBonds.DetermineConnectivity(m, charge=0)
-            except Exception:  # noqa: BLE001
-                pass
         try:
-            ff = AllChem.UFF_get_forcefield(m) if hasattr(AllChem, "UFF_get_forcefield") \
-                else None
-        except Exception:  # noqa: BLE001
-            ff = None
-        if ff is None:
-            AllChem.MMFFOptimizeMolecule  # noqa: B018 - keep import warm
-            props = AllChem.MMFFGetMoleculeProperties(m)
-            ff = (AllChem.MMFFGetMoleculeForceField(m, props) if props else None)
-        e = ff.CalcEnergy() if ff is not None else float("nan")
-        out.append(e)
+            m = Chem.RWMol()
+            for z in rec["atomic_numbers"]:
+                m.AddAtom(Chem.Atom(int(z)))
+            conf = Chem.Conformer(m.GetNumAtoms())
+            for i, xyz in enumerate(rec["positions"]):
+                conf.SetAtomPosition(i, tuple(float(v) for v in xyz))
+            m.AddConformer(conf)
+            mol = m.GetMol()
+            rdDetermineBonds.DetermineBonds(mol, charge=int(rec.get("charge", 0)))
+            if kind == "rdkit_mmff":
+                props = AllChem.MMFFGetMoleculeProperties(mol)
+                ff = (AllChem.MMFFGetMoleculeForceField(mol, props)
+                      if props is not None else None)
+            else:
+                ff = AllChem.UFFGetMoleculeForceField(mol)
+            out.append(float(ff.CalcEnergy()) if ff is not None else float("nan"))
+        except Exception:  # noqa: BLE001 - a failed perception is a missing value
+            out.append(float("nan"))
     return out
-
-
-def _uff_ok(m) -> bool:
-    return m is not None and m.GetNumBonds() > 0
 
 
 def main() -> int:
@@ -143,13 +137,12 @@ def main() -> int:
 
     energies_ev: list[float] = []
     failures: list[dict] = []
-    if calc == "UFF":
+    if calc in ("rdkit_mmff", "rdkit_uff"):
         try:
-            vals = energies_uff(None, records, None)
-            energies_ev = list(vals)
+            energies_ev = list(energies_classical(calc, records))
         except Exception as exc:  # noqa: BLE001
             print(json.dumps({"ok": False, "model": args.model,
-                              "error": f"UFF failed: {exc}"}))
+                              "error": f"classical FF failed: {exc}"}))
             return 2
     else:
         for rec in records:

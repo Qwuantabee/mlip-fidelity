@@ -34,7 +34,8 @@ MODELS = {
     "orb_orbmol_v1_conservative": "orb",
     "orb_orb_v3_conservative_omol": "orb",
     "orb_v2": "orb",
-    "rdkit_uff": None,          # shared venv: rdkit is not torch-dependent
+    "rdkit_mmff": None,         # shared venv: rdkit is not torch-dependent
+    "rdkit_uff": None,
 }
 
 
