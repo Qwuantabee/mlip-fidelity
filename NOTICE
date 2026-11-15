@@ -1,0 +1,17 @@
+
+NOTE ON THIRD-PARTY MODELS AND DATA
+
+This repository's own code is MIT. The models it benchmarks keep their own terms,
+and they are NOT interchangeable:
+
+* MACE-OFF23 - the CODE is MIT, but the trained WEIGHTS are released under the
+  Academic Software Licence (ASL), which forbids commercial use. Checked from
+  package metadata, not inferred.
+* ORB-omol v1 - Apache-2.0 (checkpoint licence: Apache-2.0).
+* MMFF94 via RDKit - RDKit is BSD-3-Clause; the MMFF94 parameters are published
+  in Halgren, J. Comput. Chem. 17, 490 (1996).
+* SPICE reference data - CC0 1.0 public-domain dedication by the SPICE authors
+  (Eastman et al., Sci. Data 10, 11 (2023), doi:10.1038/s41597-022-01882-6).
+  Cite the dataset if you reuse the derived pair sets here.
+
+An earlier version of this file said ORB was "ASL 3.0"; that was wrong.

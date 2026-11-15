@@ -19,9 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-NOTE ON THIRD-PARTY MODELS AND DATA: this repository's own code is MIT. The
-models it benchmarks carry their own licences (MACE-OFF23 is released under the
-Academic Software Licence, which forbids commercial use; ORB checkpoints are
-ASL 3.0). SPICE reference data is used under its own terms. See README
-"Licences" before reusing anything for commercial work.

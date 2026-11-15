@@ -1,7 +1,8 @@
 # Long-horizon loop: mlip-fidelity
 
 Model for every turn in this loop: `opencode-go/deepseek-v4.1-flash` (Go allowance).
-Owner: Main agent on Johnsoner. Started 2026-11-15 ~05:05 CT.
+Started 2026-11-15. This file documents the build loop the repo was
+produced under; it is kept because the defect trail is part of the evidence.
 
 ## Objective
 Ship `Qwuantabee/mlip-fidelity` on GitHub: a repo that answers one sharp, novel

@@ -85,8 +85,6 @@ accuracy collapses to ~0.49 for every model (p = 0.005 in all six rows), which i
 what makes the real numbers mean anything. The null is not an optional extra — it
 is the only reason to believe a 0.900.
 
-![Null control and error vs gap](figures/error_vs_gap.png)
-
 ## Where the failures live
 
 Accuracy rises with the size of the true gap: near-ties are close to coin flips
