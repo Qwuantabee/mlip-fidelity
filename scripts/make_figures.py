@@ -45,6 +45,7 @@ DISPLAY = {
     "orb_orbmol_v1_conservative": ("ORB-omol v1", "#d62728"),
     "orb_orb_v3_conservative_omol": ("ORB v3-omol", "#e8743b"),
     "orb_v2": ("ORB v2 (materials)", "#c44e52"),
+    "rdkit_mmff": ("MMFF94 (classical)", "#2ca02c"),
     "rdkit_uff": ("UFF (classical)", "#7f7f7f"),
 }
 SUBSET_ORDER = ["dipeptide", "solvated_amino_acids", "des_monomers", "des370k",
@@ -105,7 +106,10 @@ def fig_fidelity_vs_error(df: pd.DataFrame) -> None:
     # One chance line only. The null mean is ~0.50, and drawing both a null line and
     # a hard-coded 0.5 line put two dashed lines 0.01 apart on top of each other
     # (a vision pass caught it as a duplicate).
-    chance = float(nulls.mean()) if len(nulls) else 0.5
+    # Draw chance at exactly 0.5 and say so. Using the observed null mean (0.4995)
+    # put a line at 0.49 in one figure and 0.50 in the others, which reads as an
+    # inconsistency rather than as noise around a coin flip.
+    chance = 0.5
     ax.axhline(chance, color="#999999", ls="--", lw=1.2,
                label=(f"null control (shuffled pairing) {chance:.3f}"
                       if len(nulls) else "chance 0.50"))
@@ -168,7 +172,12 @@ def fig_accuracy_by_subset(df: pd.DataFrame) -> None:
     frames = [pd.read_csv(p) for p in det_paths]
     det = pd.concat(frames, ignore_index=True)
     det = det[det["qm_gap_kcal"].abs() > 0.01]
-    models = [m for m in DISPLAY if m in set(det["model"])]
+    # Take the models present in the DATA, not in a hand-maintained display dict:
+    # MMFF94 was silently missing from this panel because DISPLAY had no entry for
+    # it, which made a three-model comparison look like a two-model one.
+    present = sorted(set(det["model"]), key=lambda m: (
+        -det[det["model"] == m]["agree"].mean()))
+    models = present
     subsets = [s for s in SUBSET_ORDER if s in set(det["subset"])]
 
     fig, ax = plt.subplots(figsize=(8.4, 4.8))
@@ -182,8 +191,18 @@ def fig_accuracy_by_subset(df: pd.DataFrame) -> None:
         xs = np.arange(len(subsets)) + i * width
         ax.bar(xs, vals, width, label=label(m), color=colour(m))
         for x, v, n in zip(xs, vals, ns):
-            if n:
-                ax.text(x, v + 0.015, f"{n}", ha="center", va="bottom",
+            if not n:
+                continue
+            # NOT named `label`: that shadows the module-level label() helper and
+            # broke the axis label two lines up (UnboundLocalError).
+            txt = f"{n}"
+            if v == 0 or (v == v and v < 1e-12):
+                # a zero-height bar with only a count above it looks like missing
+                # data; print the value so "measured zero" is unmistakable
+                ax.text(x, 0.01, "0.00\n" + txt, ha="center", va="bottom",
+                        fontsize=6.2, color="#444444")
+            else:
+                ax.text(x, v + 0.015, txt, ha="center", va="bottom",
                         fontsize=6.5, rotation=90, color="#444444")
     ax.set_xticks(np.arange(len(subsets)) + width * (len(models) - 1) / 2)
     ax.set_xticklabels([s.replace("_", "\n") for s in subsets], fontsize=8)
@@ -323,7 +342,9 @@ def fig_accuracy_ci(df: pd.DataFrame) -> None:
                     xerr=[[r["accuracy"] - r["accuracy_lo"]],
                           [r["accuracy_hi"] - r["accuracy"]]],
                     fmt="o", ms=9, color=colour(r["model"]), capsize=4, lw=1.6)
-        ax.text(1.02, i, f"n={int(r['n_decided']):,}", va="center", fontsize=8,
+        ax.text(1.02, i, f"{r['accuracy']:.3f} "
+                f"[{r['accuracy_lo']:.3f}, {r['accuracy_hi']:.3f}]  "
+                f"n={int(r['n_decided']):,}", va="center", fontsize=7.5,
                 transform=ax.get_yaxis_transform(), clip_on=False)
     ax.set_yticks(y)
     ax.set_yticklabels([label(m) for m in scope["model"]], fontsize=9)
