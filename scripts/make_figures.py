@@ -102,13 +102,13 @@ def fig_fidelity_vs_error(df: pd.DataFrame) -> None:
     scope = df[df["scope"] == "all"].copy()
     fig, ax = plt.subplots(figsize=(7.2, 5.0))
     nulls = scope["null_mean_accuracy"].dropna()
-    if len(nulls):
-        ax.axhline(nulls.mean(), color="#999999", ls="--", lw=1.2,
-                   label=f"null control mean acc = {nulls.mean():.2f}")
-        ax.fill_between([0, scope["median_abs_err_kcal"].max() * 1.15],
-                        nulls.mean() - nulls.std(), nulls.mean() + nulls.std(),
-                        color="#dddddd", alpha=0.7, zorder=0,
-                        label=f"null ±1 sd (±{nulls.std():.2f})")
+    # One chance line only. The null mean is ~0.50, and drawing both a null line and
+    # a hard-coded 0.5 line put two dashed lines 0.01 apart on top of each other
+    # (a vision pass caught it as a duplicate).
+    chance = float(nulls.mean()) if len(nulls) else 0.5
+    ax.axhline(chance, color="#999999", ls="--", lw=1.2,
+               label=(f"null control (shuffled pairing) {chance:.3f}"
+                      if len(nulls) else "chance 0.50"))
     for _, r in scope.iterrows():
         ax.errorbar(r["median_abs_err_kcal"], r["accuracy"],
                     yerr=[[r["accuracy"] - r["accuracy_lo"]],
@@ -116,9 +116,14 @@ def fig_fidelity_vs_error(df: pd.DataFrame) -> None:
                     fmt="o", ms=11, color=colour(r["model"]),
                     ecolor=colour(r["model"]), elinewidth=1.4, capsize=4,
                     zorder=3)
-        ax.annotate(f"{label(r['model'])}\nn={int(r['n_decided'])}",
+        # Place the label on the side with room: a fixed +12 pt offset pushed the
+        # right-most model's text across the axes border (caught by vision QA).
+        left_side = r["median_abs_err_kcal"] > scope["median_abs_err_kcal"].median()
+        ax.annotate(f"{label(r['model'])}\nn={int(r['n_decided']):,}",
                     (r["median_abs_err_kcal"], r["accuracy"]),
-                    textcoords="offset points", xytext=(12, 4), fontsize=8.5)
+                    textcoords="offset points",
+                    xytext=(-12, 6) if left_side else (12, 6),
+                    ha="right" if left_side else "left", fontsize=8.5)
     ax.set_xlabel("median |gap error| (kcal/mol) — smaller is 'more accurate'")
     ax.set_ylabel("decision accuracy (higher is better)")
     best = scope.sort_values("accuracy", ascending=False).iloc[0]
@@ -131,21 +136,25 @@ def fig_fidelity_vs_error(df: pd.DataFrame) -> None:
     else:
         headline = (f"best {label(best['model'])} {best['accuracy']:.0%}; "
                     f"worst {label(worst['model'])} {worst['accuracy']:.0%}")
-    ax.set_title(
-        f"Decision accuracy vs gap error on {int(scope['n_decided'].max()):,}-pair scale\n"
-        f"{headline}; chance 50%", fontsize=9.5)
+    n_lo = int(scope["n_decided"].min())
+    n_hi = int(scope["n_decided"].max())
+    span = (f"{n_hi:,}" if n_lo == n_hi else f"{n_lo:,}-{n_hi:,}")
+    ax.set_xlim(-scope["median_abs_err_kcal"].max() * 0.06,
+                scope["median_abs_err_kcal"].max() * 1.45)
     ax.set_ylim(0, 1.02)
-    ax.axhline(0.5, ls="--", lw=1, color="#777777")
-    ax.text(ax.get_xlim()[1], 0.515, "chance", fontsize=7.5, ha="right",
+    ax.text(ax.get_xlim()[1], chance + 0.02, "chance", fontsize=7.5, ha="right",
             color="#555555")
+    ax.set_title(
+        f"Decision accuracy vs gap error ({span} decided pairs per model)\n"
+        f"{headline}", fontsize=9.5)
     handles = [Line2D([], [], marker="o", ls="", color="#333333", ms=6,
-                      label="decision accuracy (Wilson 95% CI is narrower "
-                            "than the marker)")]
+                      label="decision accuracy; Wilson 95% CI is narrower than "
+                            "the marker at these n")]
     ax.legend(handles=handles, loc="lower left", fontsize=7.5, frameon=False)
     ax.grid(alpha=0.25)
-    _footer(fig, "SPICE-1.1.4 QM reference; pairs within 1 kcal/mol; "
-                 "whiskers are Wilson 95% intervals. The null control (shuffled "
-                 "pairing) sits at chance for every model: see the README table.")
+    _footer(fig, "SPICE-1.1.4 QM reference; pairs within 1 kcal/mol. The null "
+                 "control (shuffled pairing) sits at chance for every model, so "
+                 "the accuracy above is not an artefact of the pairing.")
     fig.tight_layout(rect=(0, 0.03, 1, 1))
     fig.savefig(FIGS / "fidelity_vs_error.png", dpi=160)
     plt.close(fig)
@@ -174,22 +183,29 @@ def fig_accuracy_by_subset(df: pd.DataFrame) -> None:
         ax.bar(xs, vals, width, label=label(m), color=colour(m))
         for x, v, n in zip(xs, vals, ns):
             if n:
-                ax.text(x, v + 0.015, f"{n}", ha="center", fontsize=6.5,
-                        rotation=90, color="#444444")
+                ax.text(x, v + 0.015, f"{n}", ha="center", va="bottom",
+                        fontsize=6.5, rotation=90, color="#444444")
     ax.set_xticks(np.arange(len(subsets)) + width * (len(models) - 1) / 2)
     ax.set_xticklabels([s.replace("_", "\n") for s in subsets], fontsize=8)
     ax.axhline(0.5, color="#999999", ls="--", lw=1, label="chance")
     ax.set_ylabel("decision accuracy")
-    ax.set_ylim(0, 1.05)
+    # Headroom for the rotated counts; the first version let them run past the top.
+    ax.set_ylim(0, 1.22)
     tot = int(len(det))
+    # Only claim the models actually plotted; the three-way comparison belongs on
+    # the panels that show all three, and an average across unequal n reads wrong.
+    shown = [label(m) for m in models]
     ax.set_title(f"Decision accuracy by chemistry subset "
-                 f"({len(models)} {('model' if len(models) == 1 else 'models')}, "
-                 f"{tot} decided pairs)")
-    ax.legend(fontsize=8, ncol=2)
+                 f"({len(models)} {('model' if len(models) == 1 else 'models')}: "
+                 f"{', '.join(shown)})", fontsize=9.5)
+    ax.legend(fontsize=7.5, ncol=len(models) + 1, loc="upper center",
+              bbox_to_anchor=(0.5, -0.13), frameon=False)
     ax.grid(axis="y", alpha=0.25)
-    _footer(fig, "Numbers above bars are decided-pair counts for that model/subset; "
-                 "small counts are not interpretable and are shown to say so.")
-    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    _footer(fig, "Numbers above bars are decided-pair counts for that "
+                 "model/subset, summed over the pairs each model could score "
+                 f"({tot:,} rows total across models); small counts are not "
+                 "interpretable and are shown to say so.")
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(FIGS / "accuracy_by_subset.png", dpi=160)
     plt.close(fig)
 
@@ -211,39 +227,55 @@ def fig_gap_scatter(df: pd.DataFrame) -> None:
     # sliver, hiding both the diagonal and the inversions. The x-axis is therefore
     # fixed to the decision window; the y-axis is clipped to a robust percentile
     # with the clipped share stated, so an outlier cannot silently rescale the plot.
+    # Axis limits are PER PANEL. A shared y-limit sized by the worst model
+    # (MMFF94, whose median error is 32 kcal/mol) would shrink MACE's and ORB's
+    # real structure to nothing, and a single pooled 'share beyond frame' number
+    # was misleading because it averaged a 69%-clipped classical baseline with a
+    # 0.3%-clipped foundation model. Each panel states its own clipped share.
     xlim = 1.1
-    yabs = det["model_gap_kcal"].abs()
-    ylimit = float(max(2.0, min(12.0, np.percentile(yabs, 99))))
-    clipped = float((yabs > ylimit).mean())
     for ax, m in zip(axes.ravel(), models):
         d = det[det["model"] == m]
+        yabs = d["model_gap_kcal"].abs()
+        ylimit = float(max(2.0, min(40.0, np.percentile(yabs, 99.5))))
+        clipped = float((yabs > ylimit).mean())
         good = d["agree"] == 1
         ax.scatter(d.loc[good, "qm_gap_kcal"], d.loc[good, "model_gap_kcal"],
                    s=7, alpha=0.45, color=colour(m), label="sign kept")
         ax.scatter(d.loc[~good, "qm_gap_kcal"], d.loc[~good, "model_gap_kcal"],
                    s=9, alpha=0.8, color="#000000", marker="x", label="inverted")
+        # Points past the y-limit are NOT silently sliced by the frame: they are
+        # drawn as triangles pinned to the edge, so "there are more out here" is
+        # visible instead of looking like a clean boundary.
+        beyond = d[yabs > ylimit]
+        if len(beyond):
+            ys = np.sign(beyond["model_gap_kcal"]) * ylimit * 0.995
+            ax.scatter(beyond["qm_gap_kcal"], ys, s=26, marker="^" if False else "v",
+                       facecolors="none", edgecolors="#555555", linewidths=0.7,
+                       label=f"beyond y-limit ({len(beyond)})")
         ax.axhline(0, color="#888888", lw=0.8)
         ax.axvline(0, color="#888888", lw=0.8)
         ax.plot([-xlim, xlim], [-xlim, xlim], color="#888888", lw=0.8, ls=":")
         acc = d["agree"].mean() if len(d) else float("nan")
         nwrong = int((~good).sum())
-        ax.set_title(f"{label(m)}\nacc {acc:.3f}, {nwrong}/{len(d)} inverted",
-                     fontsize=9)
+        ax.set_title(f"{label(m)}\nacc {acc:.3f}, {nwrong:,}/{len(d):,} inverted"
+                     + (f"; y clipped at {ylimit:.0f} ({clipped:.1%} beyond)"
+                        if clipped > 0.002 else "; y shows all points"),
+                     fontsize=8.5)
         ax.set_xlabel("QM gap (kcal/mol)", fontsize=8)
         ax.set_ylabel("model gap (kcal/mol)", fontsize=8)
         ax.tick_params(labelsize=7)
-        ax.set_xlim(-xlim, xlim)
-        ax.set_ylim(-ylimit, ylimit)
-        ax.legend(fontsize=6.5, frameon=True, framealpha=0.95, loc="lower left",
-                  markerscale=1.6)
+        ax.set_xlim(-xlim * 1.04, xlim * 1.04)
+        ax.set_ylim(-ylimit * 1.04, ylimit * 1.04)
+        ax.legend(fontsize=6.5, frameon=True, framealpha=0.95, loc="upper left",
+                  markerscale=1.6, ncol=2)
     for ax in axes.ravel()[len(models):]:
         ax.axis("off")
     fig.suptitle("Model gap vs quantum gap\n"
                  "wrong side of zero = a reversed decision", fontsize=9.5)
-    _footer(fig, f"Gaps are E(B)-E(A) for two conformers of the SAME molecule; "
-                 f"the dotted line is y=x. x is the 1 kcal/mol decision window by "
-                 f"construction; y is clipped at +-{ylimit:.0f} kcal/mol so "
-                 f"{clipped:.1%} of points lie beyond the frame.")
+    _footer(fig, "Gaps are E(B)-E(A) for two conformers of the SAME molecule; "
+                 "the dotted line is y=x. x spans the 1 kcal/mol decision window by "
+                 "construction; each panel's y-limit and clipped share are stated "
+                 "in its own title.")
     fig.tight_layout(rect=(0, 0.07, 1, 0.93))
     fig.savefig(FIGS / "gap_scatter.png", dpi=160)
     plt.close(fig)
@@ -348,11 +380,23 @@ def fig_licence_table(df: pd.DataFrame) -> None:
         if row == 0:
             cell.set_facecolor("#e8e8e8")
             cell.set_text_props(weight="bold")
-    asl = scope["licence"].astype(str).str.contains("Academic", case=False).sum()
-    ax.set_title(f"Per-model licence and decision accuracy "
-                 f"({asl} of {len(scope)} models are academic-only)", fontsize=10)
-    _footer(fig, "MACE-OFF23 weights are under the Academic Software Licence: "
-                 "non-commercial use only. Nothing here implies commercial rights.")
+    # Detect non-commercial by MEANING, not by one magic string. The first version
+    # searched for 'Academic', so rewording the licence to 'weights ASL
+    # (non-commercial); code MIT' quietly made the count read 0 of 3 - which a QA
+    # pass caught. Anyone rewriting a licence string must not be able to turn a
+    # restrictive licence into a permissive one by accident.
+    lic_all = scope["licence"].astype(str).str.lower()
+    noncom = int(lic_all.str.contains("academic|non-commercial|noncommercial|asl")
+                 .sum())
+    noun = "model" if len(scope) == 1 else "models"
+    verb = "is" if noncom == 1 else "are"  # verb agrees with the count of non-commercial ones
+    title_lic = ("Per-model licence and decision accuracy ("
+                 + str(noncom) + " of " + str(len(scope)) + " " + noun
+                 + " " + verb + " non-commercial)")
+    ax.set_title(title_lic, fontsize=10)
+    _footer(fig, "MACE-OFF23 weights are under the Academic Software Licence "
+                 "(ASL): non-commercial use only, even though its code is MIT. "
+                 "Nothing here implies commercial rights to any model.")
     fig.tight_layout(rect=(0, 0.04, 1, 1))
     fig.savefig(FIGS / "licence_table.png", dpi=160)
     plt.close(fig)

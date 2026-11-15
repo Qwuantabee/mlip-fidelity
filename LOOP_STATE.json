@@ -3,8 +3,8 @@
   "repo": "https://github.com/Qwuantabee/mlip-fidelity (not yet created)",
   "model": "opencode-go/deepseek-v4.1-flash",
   "started": "2026-11-15T05:05:00-06:00",
-  "step": 4,
-  "step_name": "SWEEP",
+  "step": 7,
+  "step_name": "README",
   "blocked_on": "full sweep running: sweep3 unit, 15232 conformers x mace_off_small + orb_orbmol_v1_conservative",
   "next_action": "when sweep3 is inactive: run scripts/score.py, then scripts/make_figures.py",
   "proven_so_far": {
@@ -18,5 +18,5 @@
     "Models proven on GPU: MACE-OFF23 small (~21s/800 conformers), ORB-omol, RDKit MMFF94 baseline.",
     "Per-model venvs mandatory (fairchem e3nn 0.6 breaks MACE at eval time)."
   ],
-  "checked_at": "2026-11-15T05:33:43-06:00"
+  "checked_at": "2026-11-15T05:45:45-06:00"
 }

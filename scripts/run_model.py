@@ -44,7 +44,7 @@ def build_calculator(model: str, device: str = "cuda"):
         size = model.rsplit("_", 1)[1]
         calc = mace_off(model=size, device=device, default_dtype="float32")
         return calc, {"model": model, "family": "MACE-OFF23",
-                      "licence": "Academic Software Licence (ASL), non-commercial",
+                      "licence": "weights ASL (non-commercial); code MIT",
                       "device": device}
     if model == "mace_mp_small":
         from mace.calculators import mace_mp
@@ -71,7 +71,7 @@ def build_calculator(model: str, device: str = "cuda"):
         return ORBCalculator(model_obj, adapter, device=device), {
             "model": model, "family": "ORB", "trained_on": trained_on,
             "checkpoint": fn_name,
-            "licence": "ASL 3.0", "device": device}
+            "licence": "Apache-2.0", "device": device}
     if model in ("rdkit_mmff", "rdkit_uff"):
         return model, {"model": model, "family": "classical force field",
                        "licence": "BSD", "device": "cpu"}

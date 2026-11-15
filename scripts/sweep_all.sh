@@ -3,9 +3,14 @@
 # serialised so two models never fight over the single GPU (measured: a second
 # runner dropped throughput and doubled wall time with no gain).
 #
-# Models: the two whose venvs are proven, plus the classical force-field baseline.
-# mace_off_small is kept first because it is the fastest and therefore delivers a
-# trustworthy number earliest.
+# A second launcher is also refused by the flock for a second reason learned the
+# hard way: a duplicate running with a different --chunk size reused the other's
+# chunk cache slots and silently corrupted every merged raw file. Chunk cache
+# names are now keyed by the slice, and every cache read re-checks the ids, but
+# one sweep at a time is still the only sane state.
+#
+# Models: the two whose venvs are proven, plus two classical baselines.
+# mace_off_small is first because it is the fastest trustworthy number.
 set -u
 cd /home/ubuntu/biotech-portfolio/mlip-fidelity
 P=/home/ubuntu/.openclaw/workspace/venv/bin/python
@@ -17,7 +22,7 @@ if ! flock -n 9; then
 fi
 echo "start $(date -Is)"
 $P scripts/run_sweep.py \
-   --models mace_off_small orb_orbmol_v1_conservative rdkit_uff \
+   --models mace_off_small orb_orbmol_v1_conservative rdkit_mmff \
    --chunk 1500
 rc=$?
 echo "rc=$rc finished=$(date -Is)"

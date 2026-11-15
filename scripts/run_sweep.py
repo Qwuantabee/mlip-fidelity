@@ -39,6 +39,49 @@ MODELS = {
 }
 
 
+def chunk_bounds(n: int, chunk: int) -> list[tuple[int, int]]:
+    """Half-open [lo, hi) slices that tile 0..n exactly once."""
+    if n <= 0:
+        return []
+    step = chunk if chunk and chunk > 0 else n
+    return [(i, min(i + step, n)) for i in range(0, n, step)]
+
+
+def chunk_path(out_dir: Path, model: str, lo: int, hi: int) -> Path:
+    """Cache filename keyed by the SLICE, never by the chunk ordinal.
+
+    Naming chunks by index (`chunk_<model>_005.json`) meant two sweeps with
+    different --chunk sizes collided on the same slot: a 600-conformer chunk was
+    resumed as if it were a 1500-conformer slice, producing 1200 duplicated and
+    6232 missing conformers in a merged file that still reported "ok".
+    """
+    return out_dir / f"chunk_{model}_{lo:06d}_{hi:06d}.json"
+
+
+def load_cached_chunk(path: Path, want_ids: list[str]) -> dict | None:
+    """Return the cached chunk only if it holds exactly the requested slice."""
+    if not path.exists():
+        return None
+    try:
+        saved = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return None
+    if not saved.get("ok"):
+        return None
+    if list(saved.get("ids", [])) != list(want_ids):
+        print(f"   ignoring stale cache {path.name}: ids are not this slice",
+              flush=True)
+        return None
+    return saved
+
+
+def check_merged_ids(ids: list[str]) -> None:
+    """A merged result must score each conformer at most once."""
+    if len(set(ids)) != len(ids):
+        dupes = len(ids) - len(set(ids))
+        raise ValueError(f"merged ids contain {dupes} duplicate conformer(s)")
+
+
 def venv_python(venv: str | None) -> str:
     if venv is None:
         return "/home/ubuntu/.openclaw/workspace/venv/bin/python"
@@ -108,8 +151,7 @@ def main() -> int:
     # runner exceeded this 19 GB machine and was OOM-killed (rc=137) after an
     # earlier identical run had succeeded, so the memory ceiling is not
     # reproducible at full size. Each chunk is a separate subprocess, merged after.
-    chunk = args.chunk if args.chunk and args.chunk > 0 else len(recs)
-    bounds = [(i, min(i + chunk, len(recs))) for i in range(0, len(recs), chunk)]
+    bounds = chunk_bounds(len(recs), args.chunk)
 
     summary = {}
     for model in models:
@@ -124,9 +166,10 @@ def main() -> int:
             # Persist each chunk the moment it finishes. An earlier full run was
             # OOM-killed at chunk 2 and lost ALL of chunk 1's work because results
             # were only merged at the end; a crash must cost one chunk, not the run.
-            part_raw = out_dir / f"chunk_{model}_{ci:03d}.json"
-            if part_raw.exists():
-                saved = json.loads(part_raw.read_text())
+            want_ids = [c["id"] for c in recs[lo:hi]]
+            part_raw = chunk_path(out_dir, model, lo, hi)
+            saved = load_cached_chunk(part_raw, want_ids)
+            if saved is not None:
                 ids_all += saved["ids"]
                 energies_all += saved["energies_ev"]
                 failures += saved.get("failures", [])
@@ -154,6 +197,7 @@ def main() -> int:
         if not ok:
             summary[model] = {"ok": False, "model": model, "error": err}
             continue
+        check_merged_ids(ids_all)
         merged = {"ok": True, "model": model, "meta": model_meta,
                   "ids": ids_all, "energies_ev": energies_all,
                   "n_ok": int(sum(1 for e in energies_all if e == e)),
