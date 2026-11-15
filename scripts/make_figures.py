@@ -423,6 +423,109 @@ def fig_licence_table(df: pd.DataFrame) -> None:
     plt.close(fig)
 
 
+def fig_heldout(_df: pd.DataFrame | None = None) -> None:
+    """The held-out test: in-sample vs out-of-sample, and the difficulty offset.
+
+    Takes `_df` only because main() calls every figure builder with the summary
+    frame; this figure reads results/heldout_folmsbee_summary.csv instead, since
+    the in-sample and held-out numbers live in different artefacts.
+
+    This is the figure the repo's central claim needs, and it did not exist until
+    a second held-out benchmark showed the two sets disagree. Left panel: each
+    model's in-sample SPICE accuracy against its accuracy on unseen sub-kcal
+    pairs. Right panel: the same shift with the uncontaminated control (MMFF94,
+    which has trained on neither dataset) subtracted, which is the only way to
+    separate contamination from the held-out slice simply being easier.
+    """
+    fb_path = RESULTS / "heldout_folmsbee_summary.csv"
+    if not fb_path.exists():
+        print("  (skipping heldout: run scripts/score_heldout.py --bench "
+              "results/heldout_folmsbee.json --tag heldout_folmsbee)")
+        return
+    ins = load_summary()
+    ins = ins[ins["scope"] == "all"].set_index("model")
+    out = pd.read_csv(fb_path).set_index("model")
+
+    order = [m for m in ("orb_orbmol_v1_conservative", "mace_off_small",
+                         "rdkit_mmff") if m in ins.index and m in out.index]
+    if not order:
+        return
+
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10.4, 4.4),
+                                  gridspec_kw=dict(width_ratios=[1.15, 1]))
+    xs = np.arange(len(order))
+    w = 0.36
+    a_in = [ins.loc[m, "accuracy"] for m in order]
+    a_out = [out.loc[m, "acc_under_1kcal"] for m in order]
+    lo = [out.loc[m, "acc_under_1kcal_lo"] for m in order]
+    hi = [out.loc[m, "acc_under_1kcal_hi"] for m in order]
+
+    ax.bar(xs - w / 2, a_in, w, label="SPICE (in-sample)",
+           color="#9ecae1", edgecolor="black", linewidth=0.5)
+    ax.bar(xs + w / 2, a_out, w, label="Folmsbee (held out)",
+           color="#d62728", edgecolor="black", linewidth=0.5)
+    ax.errorbar(xs + w / 2, a_out,
+                yerr=[np.array(a_out) - np.array(lo), np.array(hi) - np.array(a_out)],
+                fmt="none", ecolor="black", capsize=3, lw=1.1)
+    for x, v in zip(xs - w / 2, a_in):
+        ax.text(x, v + 0.012, f"{v:.3f}", ha="center", fontsize=7.5)
+    for x, v in zip(xs + w / 2, a_out):
+        ax.text(x, v - 0.035, f"{v:.3f}", ha="center", fontsize=7.5, color="white",
+                fontweight="bold")
+    ax.axhline(0.5, ls="--", lw=1, color="#777777")
+    ax.set_xticks(xs)
+    ax.set_xticklabels([label(m) for m in order], fontsize=8)
+    ax.set_ylim(0, 1.02)
+    ax.set_ylabel("decision accuracy on sub-kcal pairs")
+    ax.set_title("Same models, same question, unseen molecules\n"
+                 f"{int(out['n_under_1kcal'].iloc[0]):,} held-out pairs "
+                 f"vs {int(ins['n_decided'].max()):,} in-sample",
+                 fontsize=9.5)
+    # Below the axes, not inside: every in-axes corner holds a bar.
+    ax.legend(fontsize=7.5, frameon=False, loc="upper center",
+              bbox_to_anchor=(0.5, -0.12), ncol=2)
+    ax.grid(axis="y", alpha=0.25)
+
+    # Right panel: shift net of the uncontaminated control.
+    control = "rdkit_mmff"
+    offset = (out.loc[control, "acc_under_1kcal"] - ins.loc[control, "accuracy"]
+              if control in order else 0.0)
+    shifts = [(out.loc[m, "acc_under_1kcal"] - ins.loc[m, "accuracy"]) - offset
+              for m in order]
+    cols = ["#2ca02c" if abs(sv) < 0.02 else "#d62728" for sv in shifts]
+    ax2.barh(xs, shifts, 0.55, color=cols, edgecolor="black", linewidth=0.5)
+    for y, sv in zip(xs, shifts):
+        ax2.text(sv + (0.006 if sv >= 0 else -0.006), y, f"{sv:+.3f}",
+                 va="center", ha="left" if sv >= 0 else "right", fontsize=8)
+    ax2.axvline(0, color="black", lw=1)
+    ax2.set_yticks(xs)
+    ax2.set_yticklabels([label(m) for m in order], fontsize=8)
+    ax2.set_xlabel("accuracy change beyond the uncontaminated control")
+    # Two SHORT lines. The explanatory clause ("...so its own bar is zero by
+    # construction") made line 2 wider than the half-canvas and clipped it at the
+    # figure edge; the explanation belongs in the footer, which wraps.
+    ax2.set_title("Contamination effect, difficulty removed\n"
+                  f"(MMFF94 = {offset:+.3f}, the difficulty offset)",
+                  fontsize=9.5)
+    ax2.set_xlim(min(shifts) - 0.045, max(shifts) + 0.045)
+    # Four ticks, not the default eight: at this narrow range the labels ran
+    # together with no gap (a vision pass caught it).
+    ax2.set_xticks(np.linspace(round((min(shifts) - 0.04) * 40) / 40,
+                               round((max(shifts) + 0.04) * 40) / 40, 4))
+    ax2.grid(axis="x", alpha=0.25)
+
+    _footer(fig, "Left: in-sample SPICE (pairs < 1 kcal/mol) against Folmsbee & "
+                 "Hutchison 2021 (DLPNO-CCSD(T), sub-kcal pairs only), with 95% "
+                 "Wilson intervals. Right: the shift with MMFF94's +0.024 "
+                 "subtracted, since MMFF94 trained on neither set and therefore "
+                 "measures how much easier this held-out slice is. A near-zero bar "
+                 "means no detectable in-sample inflation, so MMFF94's own bar "
+                 "is zero by construction.")
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.savefig(FIGS / "heldout.png", dpi=160)
+    plt.close(fig)
+
+
 def main() -> int:
     global FIGS
     ap = argparse.ArgumentParser()
@@ -437,7 +540,8 @@ def main() -> int:
                      (fig_gap_scatter, "gap_scatter"),
                      (fig_error_vs_gap, "error_vs_gap"),
                      (fig_accuracy_ci, "accuracy_ci"),
-                     (fig_licence_table, "licence_table")):
+                     (fig_licence_table, "licence_table"),
+                     (fig_heldout, "heldout")):
         fn(df)
         p = FIGS / f"{name}.png"
         made.append((name, p.stat().st_size))

@@ -30,6 +30,12 @@ lower?* Score the sign. Compare that to the model's own energy error.
 | MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.760** (0.753–0.766) | 0.45 kcal/mol | 0.005 |
 | MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.601 (0.594–0.609) | 1.61 kcal/mol | 0.005 |
 
+**Read this table as an in-sample measurement.** Two of the three models trained
+on SPICE — MACE-OFF23 on ~95% of v1, ORB-omol via OMol25's documented SPICE2 — so
+these numbers are fidelity to their own training data, not generalisation. The
+held-out test further down is where generalisation is measured, and it changes
+which model the result favours. Only MMFF94 was ever a clean row.
+
 All three rows are recomputed from the committed `results/decisions_*.csv` by
 `scripts/score.py`, and a model only appears here if
 `scripts/verify_completeness.py` confirms its raw artefact covers every one of the
@@ -97,6 +103,8 @@ slice where they overlap with SPICE: reference gaps under 1 kcal/mol.
 | MPCONF196 (Řezáč 2018) | 7 | 30 | PNO-LCCSD(T)-F12 |
 
 ### The result, and a correction
+
+![In-sample vs held out](figures/heldout.png)
 
 | model | SPICE (in-sample) | **Folmsbee held out** | shift | beyond difficulty |
 |---|---|---|---|---|
