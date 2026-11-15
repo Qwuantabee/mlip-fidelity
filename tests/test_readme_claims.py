@@ -41,6 +41,50 @@ def _all(summary, model):
     return row.iloc[0]
 
 
+def _table_rows(readme: str) -> dict[str, list[str]]:
+    """Parse the results markdown table into {model-id: [cells]}.
+
+    The first version of this test only asserted the string "0.900" appeared
+    somewhere in the README. Mutating the table row to 0.950 still passed, because
+    the old number survived in the prose below — so the test now reads the TABLE
+    CELL, which is the number readers actually see first.
+    """
+    rows = {}
+    for line in readme.splitlines():
+        if not line.startswith("|") or line.startswith("|---") or "model" in line:
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        name = cells[0].replace("*", "").strip()
+        for key, needle in (("orb_orbmol_v1_conservative", "ORB-omol"),
+                            ("mace_off_small", "MACE-OFF23"),
+                            ("rdkit_mmff", "MMFF94")):
+            if needle.lower() in name.lower():
+                rows[key] = cells
+    return rows
+
+
+def test_readme_table_cell_matches_the_measured_accuracy(summary, readme):
+    rows = _table_rows(readme)
+    assert rows, "could not find the results table in the README"
+    for model in ("orb_orbmol_v1_conservative", "mace_off_small", "rdkit_mmff"):
+        assert model in rows, f"{model} is missing from the results table"
+        measured = f"{_all(summary, model).accuracy:.3f}"
+        # The accuracy cell looks like `**0.900** (0.895–0.905)` or `0.563 (0.555–0.571)`.
+        # Bolding is presentation, so accept either; anchor on the leading decimal
+        # immediately followed by a CI, which is what makes it the accuracy cell and
+        # not the error or n cell.
+        acc_cell = next(
+            (c for c in rows[model]
+             if re.match(r"\*{0,2}\d\.\d+\*{0,2}\s*\(", c)), None)
+        assert acc_cell is not None, (
+            f"no accuracy cell for {model}; cells were {rows[model]}")
+        quoted = re.match(r"\*{0,2}(\d\.\d+)", acc_cell).group(1)
+        assert quoted == measured, (
+            f"README table says {quoted} for {model}; the CSV says {measured}")
+
+
 def test_readme_quotes_the_measured_accuracy(summary, readme):
     for model, quoted in [
         ("orb_orbmol_v1_conservative", "0.900"),
