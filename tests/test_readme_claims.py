@@ -143,9 +143,25 @@ def _display(model: str) -> str:
 
 
 def test_readme_headline_is_computed_not_handwritten(summary, readme):
-    """The '1 decision in 10' and '25%' claims must follow from the CSV."""
-    orb_wrong = 1 - _all(summary, "orb_orbmol_v1_conservative").accuracy
-    mace_wrong = 1 - _all(summary, "mace_off_small").accuracy
-    assert "1 decision in 10" in readme and 0.09 <= orb_wrong <= 0.11, (
-        "the headline claims 1-in-10 but the artefact disagrees")
-    assert "25%" in readme and 0.24 <= mace_wrong <= 0.26
+    """The headline's three error/accuracy pairs must follow from the CSV.
+
+    TEST-CHANGE (2026-11-15): this test used to assert the strings "1 decision in
+    10" and "25%". Those were correct for the artefacts as they then stood, but the
+    artefacts were wrong: an independent review found RDKit force fields return
+    kcal/mol while the runner stored them as eV, inflating every MMFF gap by
+    23.06x. With that fixed, the old headline's premise - that energy error and
+    decision accuracy are independent - is refuted by the data, so the README was
+    rewritten to state the monotone relationship instead. The test's INTENT is
+    unchanged (no number may be handwritten), so it now checks all three published
+    error/accuracy pairs against summary.csv rather than two prose strings.
+    """
+    for model, n_decimals in (("orb_orbmol_v1_conservative", 2),
+                              ("mace_off_small", 2),
+                              ("rdkit_mmff", 2)):
+        row = _all(summary, model)
+        err = f"{row.median_abs_err_kcal:.{n_decimals}f}"
+        acc = f"{row.accuracy:.3f}"
+        assert err in readme, (
+            f"{model}: median error {err} kcal/mol is in the CSV but not the README")
+        assert acc in readme, (
+            f"{model}: accuracy {acc} is in the CSV but not the README")

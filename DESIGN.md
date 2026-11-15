@@ -42,7 +42,7 @@ For each of N systematically chosen **decision pairs** — two geometries that
 differ only in a chemically meaningful way — compute, for every model M:
 
     ΔE_M = E_M(geometry B) − E_M(geometry A)
-    ΔE_QM = the same difference from the reference (ωB97X-D / DFT, or CCSD(T)
+    ΔE_QM = the same difference from the reference (ωB97M-D3(BJ) / DFT, or CCSD(T)
             where the dataset provides it)
 
 and ask: **does sign(ΔE_M) == sign(ΔE_QM), and by how much does |ΔE_M − ΔE_QM|
@@ -57,7 +57,7 @@ headline figure and the thing that makes the repo quotable.
 ## Where the data comes from
 
 Use SPICE (16 GB, Zenodo 8222043, already downloaded: ~1M conformers with
-ωB97X-D/def2-TZVP energies and forces across drug-like molecules, peptides,
+ωB97M-D3(BJ)/def2-TZVPPD energies and forces across drug-like molecules, peptides,
 solvated amino acids, and protein fragments). It is the community standard for
 training and evaluating MLIPs on biomolecular chemistry, and unlike most
 benchmarks it contains **many near-degenerate conformers of the same molecule** —
@@ -97,7 +97,7 @@ is recorded in the results.
    pipeline is measuring nothing and the run is void.
 4. **Report the losers.** Models that do well and models that fail both appear;
    no model is dropped from the table for being embarrassing.
-5. **Stated limits, not hidden ones.** SPICE is ωB97X-D, not CCSD(T); a decision
+5. **Stated limits, not hidden ones.** SPICE is ωB97M-D3(BJ), not CCSD(T); a decision
    pair is a proxy for a chemical decision; conformer pairs are not reaction
    energies. All in the README's limits section.
 

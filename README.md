@@ -1,6 +1,6 @@
 # Do machine-learned potentials preserve the chemical decisions?
 
-**Energy error does not tell you whether a potential will order two near-degenerate conformers correctly: on 16,089 real quantum pairs, the best model here still reverses 1 decision in 10, while a force field with 206× its energy error still gets more than half of them right.**
+**On sub-kcal/mol conformer pairs, sign accuracy is a steep and predictable function of pair-gap error: a median error of 0.15 kcal/mol gets 90% of orderings right, 0.45 gets 75%, and 1.35 gets 56%. Error does predict the decision — but only if you compare it to the gap you are trying to resolve, not to a leaderboard MAE.**
 
 ![Decision accuracy vs gap error](figures/fidelity_vs_error.png)
 
@@ -8,9 +8,14 @@ Universal machine-learned interatomic potentials (uMLIPs) are ranked, in every
 2026 benchmark, by energy MAE in meV/atom. Nobody downstream of those benchmarks
 consumes an energy MAE. A chemist consumes a **decision**: which of these two
 conformers is lower, does this reaction go forward, which tautomer wins. Those are
-questions about *differences*, at roughly a 1 kcal/mol bar — two orders of
-magnitude coarser than the meV/atom numbers on the leaderboards, and a different
-question from the average error.
+questions about *differences*, at roughly a 1 kcal/mol bar.
+
+That bar is **not** orders of magnitude coarser than a leaderboard number — it is
+the same size, because the two are different quantities. 1 kcal/mol is 43 meV per
+molecule, which at the median 36 atoms in this set is **1.2 meV/atom**: the same
+order as the ~1 meV/atom MAEs these models advertise. The point is not that the
+bar is coarser; it is that an average error and a resolution threshold are not
+interchangeable, and only one of them tells you whether two candidates swap.
 
 So this repo asks it directly. Take **16,089 conformer pairs** from the SPICE
 quantum-chemistry dataset — two geometries of the *same molecule* whose reference
@@ -23,7 +28,7 @@ lower?* Score the sign. Compare that to the model's own energy error.
 |---|---|---|---|---|---|---|
 | **ORB-omol v1 (conservative)** | Apache-2.0 | 15,232 | 15,991 | **0.900** (0.895–0.905) | 0.15 kcal/mol | 0.005 |
 | MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.747** (0.740–0.753) | 0.45 kcal/mol | 0.005 |
-| MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.563 (0.555–0.571) | 31.7 kcal/mol | 0.005 |
+| MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.563 (0.555–0.571) | 1.35 kcal/mol | 0.005 |
 
 All three rows are recomputed from the committed `results/decisions_*.csv` by
 `scripts/score.py`, and a model only appears here if
@@ -32,28 +37,32 @@ All three rows are recomputed from the committed `results/decisions_*.csv` by
 
 Four things worth taking from that table.
 
-1. **A small energy error does not mean the decisions are right.** MACE-OFF23's
-   median error is 0.45 kcal/mol — under half the 1 kcal/mol decision bar — and it
-   still reverses **25%** of near-degenerate pairs. Being accurate on average is
-   not the same as being reliable on differences.
+1. **A small average error is not a resolution guarantee.** MACE-OFF23's median
+   error is 0.45 kcal/mol, and the pairs it is being asked about have a median
+   true gap of only 0.55 kcal/mol (5th-95th percentile: 0.09-0.95). An error the
+   size of the gap means a coin flip on the small ones, which is why it reverses
+   25%.
 
 2. **The best model is still wrong one time in ten.** ORB-omol's median error is
-   0.15 kcal/mol, ~6× inside the bar, and 0.900 accuracy means 1,600 wrong
-   chemical decisions out of 15,991. If your design loop ranks hundreds of
-   candidates per run, that is a lot of wrong orderings.
+   0.15 kcal/mol and 0.900 accuracy means 1,596 wrong orderings out of 15,991. If
+   your design loop ranks hundreds of candidates per run, that is a lot of
+   swapped pairs.
 
-3. **Energy error and decision accuracy are not interchangeable, but nor are they
-   independent.** MMFF94's median error is **206×** ORB's, yet it still orders 56%
-   of pairs correctly. A model cannot get 56% of sub-kcal orderings right by
-   chance alone (the null sits at 0.49), so the pairs carry real signal a crude
-   force field partially captures. With only three models, **I do not fit a trend
-   line** — three points cannot support one. The scatter is shown so the reader
-   can see the three claims side by side, not so that a slope can be read off it.
+3. **Accuracy tracks error, and the ordering is unambiguous.** With the classical
+   baseline's units corrected (see "What went wrong"), the three models are
+   monotone in *every* error measure: median gap error 0.15 / 0.45 / 1.35 kcal/mol
+   gives accuracy 0.900 / 0.747 / 0.563. Pairwise differences are robust to
+   clustering by molecule — ORB−MACE +0.157 [0.149, 0.166], MACE−MMFF +0.185
+   [0.174, 0.197] — so this is not a tie. **I do not fit a trend line:** three
+   points cannot distinguish a curve from a coincidence, and an earlier draft of
+   this README claimed the two were independent, which the corrected units
+   refuted.
 
 4. **The biomolecular slice is consistently harder.** Every model drops on
    peptides and solvated amino acids: ORB 0.900 → **0.855**, MACE 0.747 → **0.636**,
    MMFF94 0.563 → 0.552. See
-   [`figures/accuracy_by_subset.png`](figures/accuracy_by_subset.png).
+   [`figures/accuracy_by_subset.png`](figures/accuracy_by_subset.png). Part of that
+   is composition, not chemistry — see Limits.
 
 ![Accuracy with confidence intervals](figures/accuracy_ci.png)
 
@@ -87,7 +96,7 @@ plotted range — counted rather than hidden:
 ## How the data is built
 
 - **Reference:** [SPICE 1.1.4](https://zenodo.org/records/8222043)
-  (ωB97X-D/def2-TZVP), 19,238 molecules. Downloaded and byte-verified against its
+  (ωB97M-D3(BJ)/def2-TZVPPD), 19,238 molecules. Downloaded and byte-verified against its
   Content-Length (16,058,156,944 bytes).
 - **Pairs:** every conformer pair of a molecule whose QM energies differ by under
   1 kcal/mol, capped per molecule and selected deterministically from a seed:
@@ -169,14 +178,30 @@ non-commercial weights permissive after a rewording.
 
 ## Limits, stated plainly
 
-- **SPICE is ωB97X-D, not CCSD(T).** At sub-kcal gaps the reference itself carries
+- **SPICE is ωB97M-D3(BJ), not CCSD(T).** At sub-kcal gaps the reference itself carries
   error; a "wrong" decision within ~0.2 kcal/mol should be read as
   indistinguishable from reference noise, not as a model failure.
-- **ORB-omol may overlap SPICE in training.** ORB-omol is trained on molecules and
-  SPICE is a public molecule dataset; I have **not** verified whether SPICE
-  conformers were in its training set, and I cannot. Its 0.900 should be read as
-  an upper bound under possible train/test contamination, not a clean
-  generalisation estimate. This is the single biggest caveat in the table.
+- **Two of the three rows are train/test contaminated, and I only found out after
+  publishing.** This is the single biggest caveat in the table and a reviewer had
+  to point it out:
+  - **MACE-OFF23** is trained on ~95% of SPICE v1 (MACE-OFF paper, arXiv 2312.15211,
+    Sec. II.2), so scoring it on SPICE 1.1.4 is mostly an **in-sample** evaluation.
+    Its 0.747 is an in-sample number that is still only 0.747.
+  - **ORB-omol** is trained on OMol25, whose community domain documents SPICE2 — a
+    superset of SPICE 1.x. So it is also very likely in-sample at the molecule
+    level; geometry-level overlap I cannot verify.
+  - **MMFF94** is the only clean out-of-sample row.
+  - Read the ML accuracies as *fidelity to their own training data*, not as
+    generalisation. A held-out test on an independent conformer benchmark
+    (Folmsbee, MPCONF196, TorsionNet206) is the missing experiment.
+- **Not every pair is a conformer pair, and the wording above overstates it.**
+  3,149 of 16,089 pairs (19.6%) come from multi-component systems: the DES370K
+  subset is hydrogen-bonded **dimers** (`C=C.[Na+]`), so those pairs are
+  intermolecular geometry changes, and the 21 ion-pair molecules are diatomics
+  scanned over 2.5-7.4 Å. The ion-pair row is a mechanical failure, not a chemistry
+  failure — all three models return exact-zero gaps beyond ~6 Å, consistent with a
+  graph cutoff — and ORB scores 0.126 there. Excluding those two subsets changes
+  every headline number and is the first thing a follow-up should do.
 - **A conformer pair is a proxy for a chemical decision.** It is the cheapest
   honest proxy — same molecule, real quantum energies, thousands of examples — but
   it is not a reaction energy, a binding affinity, or a barrier. Do not quote these
@@ -186,8 +211,10 @@ non-commercial weights permissive after a rewording.
   headline is a statement about these three, not a law.
 - **Counts differ per model** because a conformer a model cannot evaluate cannot
   be scored in any pair containing it; each row states its own n. MACE-OFF23
-  returned NaN on 319 of 15,232 conformers (2.1%), almost all of them charged or
-  radical species.
+  returned NaN on 319 of 15,232 conformers (2.1%). I originally wrote "almost all
+  charged or radical species"; that was wrong. Checked: **every one of the 319
+  contains an element MACE-OFF23 does not support** (Li 43, Na 135, K 154, Mg 3,
+  Ca 20), and none is merely charged.
 - **MACE-OFF23 shows float32 precision loss on these molecules.** Its absolute
   energies sit near −28,000 eV, where float32 resolution is ~0.045 kcal/mol; 441
   scored pairs (2.8% of decided ones) have a model gap of *exactly* zero and are

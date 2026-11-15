@@ -23,6 +23,10 @@ import time
 import traceback
 
 
+# kcal/mol per eV. RDKit force fields report kcal/mol; this repo stores eV.
+KCAL_PER_EV = 627.5094740631 / 27.211386245988          # 23.0605419
+
+
 def _atoms(rec: dict):
     from ase import Atoms
     import numpy as np
@@ -109,7 +113,14 @@ def energies_classical(kind: str, records):
                       if props is not None else None)
             else:
                 ff = AllChem.UFFGetMoleculeForceField(mol)
-            out.append(float(ff.CalcEnergy()) if ff is not None else float("nan"))
+            # RDKit's CalcEnergy() returns KCAL/MOL, not eV. The first version
+            # stored it under the "energies_ev" key, and score.py then treated it as
+            # eV and divided by 27.211386 to get kcal/mol - inflating every MMFF gap
+            # by 627.509/27.211 = 23.0605x. Measured: the published "206x the best
+            # model's error" was really 8.8x. Convert here, at the source, so every
+            # artefact carries true eV like the ML models do.
+            e_kcal = float(ff.CalcEnergy())
+            out.append(e_kcal / KCAL_PER_EV if ff is not None else float("nan"))
         except Exception:  # noqa: BLE001 - a failed perception is a missing value
             out.append(float("nan"))
     return out
