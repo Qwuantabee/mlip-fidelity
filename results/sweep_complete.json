@@ -1,5 +1,10 @@
 {
-  "complete": ["mace_off_small", "rdkit_mmff"],
-  "note": "A model appears here only when its full sweep finished and its raw artefact covers every conformer in results/conformers.jsonl. orb_orbmol_v1_conservative is deliberately absent: its re-run is still in progress, and a partial artefact is what produced the withdrawn 0.893.",
-  "verified_on": "2026-11-15"
+  "complete": [
+    "mace_off_small",
+    "orb_orbmol_v1_conservative",
+    "rdkit_mmff"
+  ],
+  "partial": {},
+  "n_conformers": 15232,
+  "note": "A model appears here only when its full sweep finished AND its raw artefact covers every conformer in results/conformers.jsonl. ORB was readmitted after a complete re-run covering all 15232 conformers with zero missing and zero NaNs."
 }

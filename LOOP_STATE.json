@@ -2,18 +2,20 @@
   "project": "mlip-fidelity",
   "repo": "https://github.com/Qwuantabee/mlip-fidelity",
   "model": "opencode-go/deepseek-v4.1-flash",
-  "step": 45,
-  "step_name": "FINALIZE_PENDING (ORB re-run in flight)",
-  "next_action": "On each fire run scripts/loop_step.py; while it returns 45 run scripts/finalize_orb.py. When the ORB raw covers >=95% of exported conformers finalize_orb.py merges, marks the model complete, scores and redraws; then verify each published row recomputes from its decisions CSV, add ORB back to the README table, delete the withdrawal paragraph, commit and push.",
+  "step": 9,
+  "step_name": "COMPLETE - published and verified",
+  "next_action": "none; project shipped. Optional future work listed in README limits.",
   "published_and_verified": {
+    "orb_orbmol_v1_conservative": "0.900 (0.895-0.905) n=15991, median err 0.15 kcal, null p 0.005",
     "mace_off_small": "0.747 (0.740-0.753) n=15717, median err 0.45 kcal, null p 0.005",
     "rdkit_mmff": "0.563 (0.555-0.571) n=15578, median err 31.7 kcal, null p 0.005",
-    "bio_slice_mace": "0.636 (0.625-0.648) n=6538"
+    "bio_slice": "ORB 0.855, MACE 0.636"
   },
   "rules": [
     "Never publish a row whose decisions CSV does not recompute to its summary row.",
     "Never score a model absent from results/sweep_complete.json.",
     "A partial artefact is what produced the withdrawn ORB 0.893 - do not repeat it."
   ],
-  "checked_at": "2026-11-15T06:06:08-06:00"
+  "checked_at": "2026-11-15T06:09:55-06:00",
+  "coverage_verified": "ORB raw covers 15232/15232 conformers, 0 missing, 0 NaN; every published row recomputes from its decisions CSV"
 }

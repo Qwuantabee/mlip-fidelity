@@ -21,28 +21,31 @@ reference energies differ by **less than 1 kcal/mol** — and ask each model:
 
 | model | licence | decided pairs | **decision accuracy** (95% CI) | median \|ΔE\| error | null control p |
 |---|---|---|---|---|---|
+| **ORB-omol v1** | Apache-2.0 | 15,991 | **0.900** (0.895–0.905) | 0.15 kcal/mol | 0.005 |
 | **MACE-OFF23 (small)** | weights ASL, code MIT | 15,717 | **0.747** (0.740–0.753) | 0.45 kcal/mol | 0.005 |
 | MMFF94 (classical) | BSD | 15,578 | 0.563 (0.555–0.571) | 31.7 kcal/mol | 0.005 |
 
-*(ORB-omol v1 is being re-measured: an earlier row was scored from a stale
-partial artefact and is withdrawn until its number reproduces from the committed
-decision CSV. See "What went wrong" below.)*
+ORB-omol v1 leads at **0.900** — but it still reverses 10.0% of
+near-degenerate pairs, and every model's number is checked against a shuffled-pair
+control before it is quoted.
 
 Three things worth taking from that table.
 
-1. **A small energy error does not mean the decisions are right.** MACE-OFF23's
-   median error is 0.45 kcal/mol — under half the 1 kcal/mol bar — and
-   it still gets 25.3% of near-degenerate pairs wrong.
+1. **A small energy error does not mean the decisions are right.** ORB-omol's
+   median error is 0.15 kcal/mol — a seventh of the 1 kcal/mol bar — and it
+   still reverses 10.0% of near-degenerate pairs. MACE-OFF23 sits at
+   0.45 kcal/mol and reverses 25.3%.
 
 2. **Accuracy and error size are not the same axis.** MMFF94's median error is
-   63× MACE's, yet it still orders 56% of pairs correctly — barely above chance,
+   206× ORB-omol's, yet it still orders 56% of pairs correctly — barely above chance,
    but far from the 0% a 32 kcal/mol error might suggest. Conversely a small error
    does not guarantee a correct ordering. That is the whole point of scoring
    decisions separately, and it is invisible on an MAE leaderboard.
 
-3. **The biomolecular slice is harder.** MACE-OFF23 drops from 0.747 overall to
-   **0.636** on peptides and solvated amino acids — the chemistry a protein
-   engineer cares about is where this model is weakest. See
+3. **The biomolecular slice is harder for both ML models.** ORB-omol drops from
+   0.900 to **0.855**, MACE-OFF23 from 0.747 to **0.636**, on peptides and
+   solvated amino acids — the chemistry a protein engineer cares about is where
+   these models are weakest. See
    [`figures/accuracy_by_subset.png`](figures/accuracy_by_subset.png).
 
 ![Accuracy with confidence intervals](figures/accuracy_ci.png)
@@ -124,13 +127,17 @@ classical baseline that "succeeded" with no bonds at all in the molecule
 that called MACE's non-commercial weights permissive after a rewording. Each has
 a test or a committed note; the commit messages carry the evidence.
 
-**A withdrawn number, on purpose.** An earlier revision of this README reported
-ORB-omol v1 at 0.893. That row had been scored from a committed artefact holding
-1,500 conformers while claiming 9,409 decided pairs — a stale file, not a result.
-Recomputing every published row from the decision CSVs is what caught it, and the
-row is withdrawn until the full re-measurement reproduces. It is written here
-rather than quietly deleted because a repo that only shows its successes teaches
-the reader nothing about how far to trust it.
+**A number was withdrawn here, and that is why you can trust the others.** An
+earlier revision reported ORB-omol v1 at 0.893, scored from a committed artefact
+holding 1,500 conformers while claiming 9,409 decided pairs — a stale file, not a
+result. Recomputing every published row from its decision CSV is what caught it.
+The row was withdrawn, the sweep re-run in full (15,232/15,232 conformers, zero
+missing, zero NaNs), and the figure above is the re-measured one. A second
+defect surfaced the same way: rounding gaps to six decimals flipped the sign of
+28 near-zero MMFF pairs, so the CSV reproduced 0.5615 while the summary said
+0.5633. Both are fixed, and `score.py --require-complete` now refuses to score a
+model whose sweep has not finished, because a partial artefact produces a
+real-looking number on a fraction of the data.
 
 ## Limits, stated plainly
 
