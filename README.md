@@ -240,6 +240,13 @@ non-commercial weights permissive after a rewording.
   charged or radical species"; that was wrong. Checked: **every one of the 319
   contains an element MACE-OFF23 does not support** (Li 43, Na 135, K 154, Mg 3,
   Ca 20), and none is merely charged.
+- **MACE-OFF23 has no charge input, yet 20.6% of the pairs it is scored on are
+  charged species.** Measured: 3,241 of its 15,717 decided pairs involve a
+  charged conformer, and it scores **0.623 there against 0.796 on neutral
+  pairs**. It was trained on the neutral ten-element subset of SPICE and accepts
+  no charge argument, so part of its gap to ORB is domain mismatch rather than
+  model quality. Scored only on its own training domain (neutral, supported
+  elements, no ion pairs) MACE reads about 0.78.
 - **MACE-OFF23 shows float32 precision loss on these molecules.** Its absolute
   energies sit near −28,000 eV, where float32 resolution is ~0.045 kcal/mol; 441
   scored pairs (2.8% of decided ones) have a model gap of *exactly* zero and are
