@@ -87,6 +87,9 @@ def main() -> int:
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--limit", type=int, default=0,
                     help="score only the first N conformers (0 = all)")
+    ap.add_argument("--chunk", type=int, default=2000,
+                    help="conformers per subprocess; bounds peak memory (a single "
+                         "15k-conformer job plus torch OOM-killed this box)")
     args = ap.parse_args()
 
     models = args.models or list(MODELS)
@@ -98,20 +101,68 @@ def main() -> int:
         recs = recs[:args.limit]
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    job = out_dir / "_job.json"
-    job.write_text(json.dumps({"conformers": recs}))
-    print(f"{len(recs)} conformers, models: {models}", flush=True)
+    print(f"{len(recs)} conformers, models: {models}, "
+          f"chunks of {args.chunk}", flush=True)
+
+    # Chunked execution. A single job file with 15k conformers plus torch inside the
+    # runner exceeded this 19 GB machine and was OOM-killed (rc=137) after an
+    # earlier identical run had succeeded, so the memory ceiling is not
+    # reproducible at full size. Each chunk is a separate subprocess, merged after.
+    chunk = args.chunk if args.chunk and args.chunk > 0 else len(recs)
+    bounds = [(i, min(i + chunk, len(recs))) for i in range(0, len(recs), chunk)]
 
     summary = {}
     for model in models:
-        print(f"-- {model} ...", flush=True)
-        res = run_one(model, job, out_dir, args.device, args.limit)
-        if res.get("ok"):
-            print(f"   ok  n={res['n_ok']} failed={res['n_failed']} "
-                  f"{res['wall_seconds']:.1f}s", flush=True)
-        else:
-            print(f"   FAILED: {res.get('error', '')[:200]}", flush=True)
-        summary[model] = {k: v for k, v in res.items()
+        ids_all: list[str] = []
+        energies_all: list[float] = []
+        failures: list[dict] = []
+        model_meta: dict = {}
+        wall = 0.0
+        ok = True
+        err = ""
+        for ci, (lo, hi) in enumerate(bounds):
+            # Persist each chunk the moment it finishes. An earlier full run was
+            # OOM-killed at chunk 2 and lost ALL of chunk 1's work because results
+            # were only merged at the end; a crash must cost one chunk, not the run.
+            part_raw = out_dir / f"chunk_{model}_{ci:03d}.json"
+            if part_raw.exists():
+                saved = json.loads(part_raw.read_text())
+                ids_all += saved["ids"]
+                energies_all += saved["energies_ev"]
+                failures += saved.get("failures", [])
+                model_meta = saved.get("meta", {})
+                wall += saved.get("wall_seconds", 0.0)
+                print(f"-- {model} chunk {ci+1}/{len(bounds)} (cached)", flush=True)
+                continue
+            part = out_dir / f"_job_{model}_{ci}.json"
+            part.write_text(json.dumps({"conformers": recs[lo:hi]}))
+            print(f"-- {model} chunk {ci+1}/{len(bounds)} "
+                  f"({hi-lo} conformers) ...", flush=True)
+            res = run_one(model, part, out_dir, args.device, None)
+            part.unlink(missing_ok=True)
+            if not res.get("ok"):
+                ok = False
+                err = res.get("error", "failed")
+                print(f"   FAILED: {err[:200]}", flush=True)
+                break
+            part_raw.write_text(json.dumps(res))
+            ids_all += res["ids"]
+            energies_all += res["energies_ev"]
+            failures += res.get("failures", [])
+            model_meta = res.get("meta", {})
+            wall += res.get("wall_seconds", 0.0)
+        if not ok:
+            summary[model] = {"ok": False, "model": model, "error": err}
+            continue
+        merged = {"ok": True, "model": model, "meta": model_meta,
+                  "ids": ids_all, "energies_ev": energies_all,
+                  "n_ok": int(sum(1 for e in energies_all if e == e)),
+                  "n_failed": len(failures), "failures": failures[:10],
+                  "wall_seconds": wall}
+        (out_dir / f"raw_{model}.json").write_text(json.dumps(merged) + "\n")
+        print(f"   ok  n={merged['n_ok']} failed={merged['n_failed']} "
+              f"{wall:.1f}s total", flush=True)
+        summary[model] = {k: v for k, v in merged.items()
                           if k not in ("ids", "energies_ev", "failures")}
     (out_dir / "run_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     ok = [m for m, s in summary.items() if s.get("ok")]

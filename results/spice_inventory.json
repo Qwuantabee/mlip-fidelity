@@ -1,0 +1,38 @@
+{
+  "n_total_molecules": 19238,
+  "n_sampled": 19238,
+  "by_subset": {
+    "pubchem": {
+      "molecules": 14643,
+      "conformers": 709400,
+      "multi_conformer": 14643
+    },
+    "des370k": {
+      "molecules": 3490,
+      "conformers": 345676,
+      "multi_conformer": 3486
+    },
+    "ion_pairs": {
+      "molecules": 28,
+      "conformers": 1426,
+      "multi_conformer": 28
+    },
+    "des_monomers": {
+      "molecules": 374,
+      "conformers": 18700,
+      "multi_conformer": 374
+    },
+    "solvated_amino_acids": {
+      "molecules": 26,
+      "conformers": 1300,
+      "multi_conformer": 26
+    },
+    "dipeptide": {
+      "molecules": 677,
+      "conformers": 33663,
+      "multi_conformer": 677
+    }
+  },
+  "archive": "/home/ubuntu/biotech-portfolio/_data/SPICE-1.1.4.hdf5",
+  "note": "counts from the first 19238 molecules, not the whole archive"
+}

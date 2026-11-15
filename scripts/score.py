@@ -94,10 +94,13 @@ def main() -> int:
 
     manifest = load_manifest(Path(args.manifest))
     out_dir = Path(args.out)
-    glob_pattern = args.raw_glob
-    raw_files = sorted(Path().glob(glob_pattern)) if not glob_pattern.startswith("/") \
-        else sorted(Path(glob_pattern.rsplit("/", 1)[0]).glob(
-            glob_pattern.rsplit("/", 1)[1]))
+    # Resolve the glob against the DIRECTORY OF THE PATTERN, not the process cwd.
+    # The earlier version globbed a relative pattern from cwd, found the raw files
+    # (they are in ./results too) but then printed a summary with no summary.csv
+    # written anywhere the figures could see; Path.glob also refuses absolute
+    # patterns, so the previous fallback raised NotImplementedError.
+    raw_path = Path(args.raw_glob)
+    raw_files = sorted(raw_path.parent.glob(raw_path.name))
     if not raw_files:
         raise SystemExit(f"no raw files matched {args.raw_glob}")
 

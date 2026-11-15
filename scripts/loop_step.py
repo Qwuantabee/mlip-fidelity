@@ -46,6 +46,21 @@ def unit_active(name: str) -> bool:
     return r.stdout.strip() == "active"
 
 
+SWEEP_UNITS = ("sweep-mace", "sweep-orb", "sweep-fairchem", "sweep-all")
+
+
+def running_sweeps() -> list[str]:
+    """Sweep units currently alive.
+
+    This exists because the loop fires every 15 minutes while a full sweep takes
+    hours. Without a check that reads DISK (not the ledger), each fire sees step 4
+    unfinished and launches another sweep: four duplicate runs were observed on
+    2026-11-15, competing for one GPU and deleting each other's partial results. A
+    fire that finds a live unit must not start another.
+    """
+    return [u for u in SWEEP_UNITS if unit_active(u)]
+
+
 def spice_complete() -> bool:
     if not SPICE.exists():
         return False
@@ -110,8 +125,17 @@ def main() -> int:
         out["next"] = (f"{PY} scripts/build_pairs.py "
                        "--archive /home/ubuntu/biotech-portfolio/_data/SPICE-1.1.4.hdf5")
     elif name == "SWEEP":
-        out["next"] = (f"{PY} scripts/run_sweep.py --models mace_off_small "
-                       "orb_orbmol_v1_conservative (extend the list as venvs prove out)")
+        live = running_sweeps()
+        out["sweeps_active"] = live
+        out["do_not_relaunch"] = bool(live)
+        if live:
+            out["next"] = (f"a sweep is ALREADY RUNNING ({', '.join(live)}); do NOT "
+                           "start another. Check the raw_*.json files, then end "
+                           "this fire.")
+        else:
+            out["next"] = (f"{PY} scripts/run_sweep.py --models mace_off_small "
+                           "orb_orbmol_v1_conservative (extend the list as venvs "
+                           "prove out)")
     elif name == "SCORE":
         out["next"] = f"{PY} scripts/score.py"
     elif name == "FIGURES":

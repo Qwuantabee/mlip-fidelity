@@ -17,5 +17,6 @@
     "27 tests pass including archive-layout and unit tests that fail against the old reader.",
     "Models proven on GPU: MACE-OFF23 small (~21s/800 conformers), ORB-omol, RDKit MMFF94 baseline.",
     "Per-model venvs mandatory (fairchem e3nn 0.6 breaks MACE at eval time)."
-  ]
+  ],
+  "checked_at": "2026-11-15T05:33:43-06:00"
 }

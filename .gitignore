@@ -1,9 +1,7 @@
-# Model environments are per-model and conflict with each other by design
 envs/
-# The 16 GB SPICE archive is downloaded, never committed
 _data/
-# Job scratch
-results/_job.json
+results/_job*.json
+results/chunk_*.json
 __pycache__/
 *.pyc
 .pytest_cache/

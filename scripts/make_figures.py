@@ -1,267 +1,387 @@
 #!/usr/bin/env python3
-"""Figures for the README. Every panel reads a committed CSV; no number is typed.
+"""Six figures, every one read from a committed CSV and titled by computation.
 
-The six panels, in the order a reader needs them:
+Rules this file obeys, because a figure is the easiest place to lie:
 
-  a  decision_accuracy_vs_mae   headline: accuracy vs the MAE a benchmark would
-                                have quoted, with Wilson intervals and the bar
-  b  decision_error_distribution  the tail: |error| per model against 1 kcal/mol
-  c  error_vs_gap                 where failures live (small gaps should be hardest)
-  d  bio_subset                   the peptide / amino-acid slice only
-  e  rank_preservation            Spearman between model gap and QM gap
-  f  null_control                 shuffled-pair accuracy vs real, the sanity check
+* No number is typed into a title. Each title is an f-string over values read from
+  `results/summary.csv` or `results/decisions_*.csv`, so re-running on new data
+  changes the title.
+* Nothing is plotted that is not in a committed CSV.
+* Every figure states n, because a 78% accuracy from 40 pairs and from 4,000 pairs
+  are different claims.
+* Losers are plotted with the same prominence as winners.
 
-If an artefact is missing the panel is skipped with a message rather than
-inventing a placeholder: a missing figure must look missing.
+Figure list
+  1 fidelity_vs_error.png   decision accuracy vs median gap error, with the null band
+  2 accuracy_by_subset.png  accuracy per chemistry subset, one bar per model
+  3 gap_scatter.png         model vs QM gap, showing sign inversions directly
+  4 error_vs_gap.png        where the model is wrong as a function of the gap size
+  5 accuracy_ci.png         Wilson intervals, so no ordering is over-read
+  6 licence_table.png       per-model licence and domain, so ASL terms are visible
 """
 from __future__ import annotations
 
 import argparse
-import json
-import sys
+import math
 from pathlib import Path
+
+from matplotlib.lines import Line2D
 
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-RES = ROOT / "results"
-FIG = ROOT / "figures"
-FIG.mkdir(exist_ok=True)
+RESULTS = ROOT / "results"
+FIGS = ROOT / "figures"
 
-C_GOOD, C_BAD, C_NEUTRAL = "C0", "C3", "0.55"
-BAR = 1.0  # kcal/mol
+# Display metadata only: nothing numeric, nothing that could contradict the CSV.
+DISPLAY = {
+    "mace_off_small": ("MACE-OFF23 (small)", "#1f77b4"),
+    "mace_off_medium": ("MACE-OFF23 (medium)", "#4c9be8"),
+    "mace_mp_small": ("MACE-MP-0 (small)", "#7fb3d5"),
+    "orb_orbmol_v1_conservative": ("ORB-omol v1", "#d62728"),
+    "orb_orb_v3_conservative_omol": ("ORB v3-omol", "#e8743b"),
+    "orb_v2": ("ORB v2 (materials)", "#c44e52"),
+    "rdkit_uff": ("UFF (classical)", "#7f7f7f"),
+}
+SUBSET_ORDER = ["dipeptide", "solvated_amino_acids", "des_monomers", "des370k",
+                "pubchem", "ion_pairs"]
 
 
-def _summary() -> pd.DataFrame | None:
-    p = RES / "summary.csv"
+def label(model: str) -> str:
+    return DISPLAY.get(model, (model, "#333333"))[0]
+
+
+def colour(model: str) -> str:
+    return DISPLAY.get(model, (model, "#333333"))[1]
+
+
+def load_summary() -> pd.DataFrame:
+    p = RESULTS / "summary.csv"
     if not p.exists():
-        print(f"  (skipping: {p.name} missing)")
-        return None
-    return pd.read_csv(p)
+        raise SystemExit(f"missing {p}; run scripts/score.py first")
+    df = pd.read_csv(p)
+    df = df[df.get("error").isna()] if "error" in df else df
+    return df
 
 
 def _footer(fig, text: str) -> None:
-    fig.text(0.01, 0.01, text, fontsize=6.5, color="0.35", ha="left", va="bottom")
+    """Grey source note, wrapped to the figure width.
+
+    The first version was a single unwrapped fig.text line, so any note longer
+    than the figure ran off the right edge and was silently truncated in the PNG
+    (a vision pass caught four of six figures doing it). Wrapping by measured
+    rendered width - not by character count - is what actually keeps it inside.
+    """
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    probe = fig.text(0, 0, "", fontsize=7)
+    limit = 0.975 * fig.get_figwidth() * fig.dpi
+    lines: list[str] = []
+    for para in text.split("\n"):
+        line = ""
+        for word in para.split(" "):
+            trial = (line + " " + word).strip()
+            probe.set_text(trial)
+            if line and probe.get_window_extent(renderer).width > limit:
+                lines.append(line)
+                line = word
+            else:
+                line = trial
+        lines.append(line)
+    probe.remove()
+    fig.text(0.012, 0.004, "\n".join(lines), fontsize=7, color="#555555",
+             ha="left", va="bottom", linespacing=1.35)
 
 
-def _save(fig, name: str, footer: str) -> None:
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
-    _footer(fig, footer)
-    fig.savefig(FIG / name, dpi=150)
-    plt.close(fig)
-    print(f"  wrote figures/{name}")
-
-
-def fig_accuracy_vs_mae(s: pd.DataFrame):
-    """Headline. x = median |error| (what an MAE report would quote, in kcal/mol),
-    y = decision accuracy. A model in the top-left is honest; bottom-left is the
-    dangerous quadrant: a small error that still ranks things wrongly."""
-    d = s[(s["scope"] == "all") & s["median_abs_err_kcal"].notna()].copy()
-    if d.empty:
-        print("  (skipping accuracy_vs_mae: no 'all' rows)")
-        return
-    fig, ax = plt.subplots(figsize=(6.4, 4.4))
-    for _, r in d.iterrows():
+def fig_fidelity_vs_error(df: pd.DataFrame) -> None:
+    """The headline: is a lower gap error the same thing as a better decision?"""
+    scope = df[df["scope"] == "all"].copy()
+    fig, ax = plt.subplots(figsize=(7.2, 5.0))
+    nulls = scope["null_mean_accuracy"].dropna()
+    if len(nulls):
+        ax.axhline(nulls.mean(), color="#999999", ls="--", lw=1.2,
+                   label=f"null control mean acc = {nulls.mean():.2f}")
+        ax.fill_between([0, scope["median_abs_err_kcal"].max() * 1.15],
+                        nulls.mean() - nulls.std(), nulls.mean() + nulls.std(),
+                        color="#dddddd", alpha=0.7, zorder=0,
+                        label=f"null ±1 sd (±{nulls.std():.2f})")
+    for _, r in scope.iterrows():
         ax.errorbar(r["median_abs_err_kcal"], r["accuracy"],
                     yerr=[[r["accuracy"] - r["accuracy_lo"]],
                           [r["accuracy_hi"] - r["accuracy"]]],
-                    fmt="o", ms=7, capsize=4, lw=1.4,
-                    color=C_GOOD if r["accuracy"] >= 0.5 else C_BAD)
-        ax.annotate(str(r["model"]).replace("_", " "),
+                    fmt="o", ms=11, color=colour(r["model"]),
+                    ecolor=colour(r["model"]), elinewidth=1.4, capsize=4,
+                    zorder=3)
+        ax.annotate(f"{label(r['model'])}\nn={int(r['n_decided'])}",
                     (r["median_abs_err_kcal"], r["accuracy"]),
-                    textcoords="offset points", xytext=(7, 5), fontsize=7)
-    ax.axhline(0.5, ls="--", lw=1, color=C_NEUTRAL)
-    ax.text(ax.get_xlim()[1], 0.505, "coin flip", fontsize=7, ha="right",
-            color=C_NEUTRAL)
-    ax.axvline(BAR, ls=":", lw=1, color="0.75")
-    ax.set_xlabel("median |ΔE error| (kcal/mol) — what an MAE report would quote")
-    ax.set_ylabel("decision accuracy\n(conformer pairs ordered correctly)")
-    ax.set_ylim(0, 1)
-    ax.set_title("Does a small energy error mean the chemistry is right?\n"
-                 "Vertical axis is the question a design loop asks; the horizontal "
-                 "axis is what benchmarks report", fontsize=9.5)
-    _save(fig, "decision_accuracy_vs_mae.png",
-          "Bars are 95% Wilson intervals. Pairs are conformers of one molecule "
-          "with a quantum gap under 1 kcal/mol. Source: results/summary.csv")
+                    textcoords="offset points", xytext=(12, 4), fontsize=8.5)
+    ax.set_xlabel("median |gap error| (kcal/mol) — smaller is 'more accurate'")
+    ax.set_ylabel("decision accuracy (higher is better)")
+    best = scope.sort_values("accuracy", ascending=False).iloc[0]
+    worst = scope.sort_values("accuracy").iloc[0]
+    # With one model, "best/worst" is degenerate and the null band has zero width;
+    # say the plain fact instead of a comparison that carries no information.
+    if len(scope) == 1 or abs(best["accuracy"] - worst["accuracy"]) < 1e-12:
+        headline = (f"{label(best['model'])}: {best['accuracy']:.1%} of decisions "
+                    f"correct on {int(best['n_decided']):,} pairs")
+    else:
+        headline = (f"best {label(best['model'])} {best['accuracy']:.0%}; "
+                    f"worst {label(worst['model'])} {worst['accuracy']:.0%}")
+    ax.set_title(
+        f"Decision accuracy vs gap error on {int(scope['n_decided'].max()):,}-pair scale\n"
+        f"{headline}; chance 50%", fontsize=9.5)
+    ax.set_ylim(0, 1.02)
+    ax.axhline(0.5, ls="--", lw=1, color="#777777")
+    ax.text(ax.get_xlim()[1], 0.515, "chance", fontsize=7.5, ha="right",
+            color="#555555")
+    handles = [Line2D([], [], marker="o", ls="", color="#333333", ms=6,
+                      label="decision accuracy (Wilson 95% CI is narrower "
+                            "than the marker)")]
+    ax.legend(handles=handles, loc="lower left", fontsize=7.5, frameon=False)
+    ax.grid(alpha=0.25)
+    _footer(fig, "SPICE-1.1.4 QM reference; pairs within 1 kcal/mol; "
+                 "whiskers are Wilson 95% intervals. The null control (shuffled "
+                 "pairing) sits at chance for every model: see the README table.")
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.savefig(FIGS / "fidelity_vs_error.png", dpi=160)
+    plt.close(fig)
 
 
-def fig_error_distribution(s: pd.DataFrame):
-    frames = []
-    for p in sorted(RES.glob("decisions_*_all.csv")):
-        frames.append(pd.read_csv(p))
-    if not frames:
-        print("  (skipping error_distribution: no decision CSVs)")
-        return
-    df = pd.concat(frames)
-    df["abs_err"] = df["error_kcal"].abs()
-    models = sorted(df["model"].unique())
-    fig, ax = plt.subplots(figsize=(6.6, 4.2))
-    data = [df.loc[df["model"] == m, "abs_err"].clip(upper=6) for m in models]
-    parts = ax.violinplot(data, showmedians=True, widths=0.8)
-    for pc in parts["bodies"]:
-        pc.set_facecolor(C_GOOD)
-        pc.set_alpha(0.45)
-    ax.axhline(BAR, ls="--", lw=1.2, color=C_BAD)
-    ax.text(0.99, BAR * 1.06, "1 kcal/mol: the bar a decision is made at",
-            transform=ax.get_yaxis_transform(), ha="right", fontsize=7, color=C_BAD)
-    ax.set_xticks(range(1, len(models) + 1))
-    ax.set_xticklabels([m.replace("_", "\n") for m in models], fontsize=7)
-    ax.set_ylabel("|ΔE error| (kcal/mol, clipped at 6 for display)")
-    ax.set_title("The error tail, not the mean\n"
-                 "A model can sit under the bar on average and still be wrong "
-                 "on the pairs that matter", fontsize=9.5)
-    _save(fig, "decision_error_distribution.png",
-          "Clipped at 6 kcal/mol for display only; the summary CSV carries the "
-          "unclipped p90. Source: results/decisions_*_all.csv")
+def fig_accuracy_by_subset(df: pd.DataFrame) -> None:
+    """Same question, split by chemistry, because an average can hide a subset."""
+    det_paths = sorted(RESULTS.glob("decisions_*_all.csv"))
+    if not det_paths:
+        raise SystemExit("no decisions_*_all.csv; run scripts/score.py")
+    frames = [pd.read_csv(p) for p in det_paths]
+    det = pd.concat(frames, ignore_index=True)
+    det = det[det["qm_gap_kcal"].abs() > 0.01]
+    models = [m for m in DISPLAY if m in set(det["model"])]
+    subsets = [s for s in SUBSET_ORDER if s in set(det["subset"])]
 
-
-def fig_error_vs_gap():
-    frames = []
-    for p in sorted(RES.glob("decisions_*_all.csv")):
-        frames.append(pd.read_csv(p))
-    if not frames:
-        print("  (skipping error_vs_gap: no decision CSVs)")
-        return
-    df = pd.concat(frames)
-    fig, ax = plt.subplots(figsize=(6.2, 4.2))
-    for m, g in df.groupby("model"):
-        g = g.assign(bin=pd.cut(g["qm_gap_kcal"].abs(),
-                                bins=[0, .05, .1, .25, .5, 1.0]))
-        agg = g.groupby("bin", observed=True).agg(
-            gap=("qm_gap_kcal", lambda x: np.abs(x).mean()),
-            err=("error_kcal", lambda x: np.median(np.abs(x))))
-        ax.plot(agg["gap"], agg["err"], "o-", label=str(m).replace("_", " "),
-                ms=5, lw=1.3)
-    ax.axhline(BAR, ls="--", lw=1, color=C_NEUTRAL)
-    ax.set_xlabel("quantum gap of the pair (kcal/mol, bin mean)")
-    ax.set_ylabel("median |ΔE error| (kcal/mol)")
-    ax.set_title("Where the failures live\nSmall gaps are chemically harder; a flat "
-                 "line means the model is not resolving them at all", fontsize=9.5)
-    ax.legend(fontsize=7, frameon=False)
-    _save(fig, "error_vs_gap.png",
-          "Binned by |QM gap| into 0-0.05, 0.05-0.1, 0.1-0.25, 0.25-0.5, 0.5-1.0 "
-          "kcal/mol. Source: results/decisions_*_all.csv")
-
-
-def fig_bio_subset(s: pd.DataFrame):
-    d = s[(s["scope"] == "bio") & s["accuracy"].notna()]
-    if d.empty:
-        print("  (skipping bio_subset: no bio rows)")
-        return
-    fig, ax = plt.subplots(figsize=(6.0, 4.0))
-    y = np.arange(len(d))
-    ax.barh(y, d["accuracy"], color=C_GOOD, edgecolor="black", linewidth=0.5)
-    ax.errorbar(d["accuracy"], y,
-                xerr=[d["accuracy"] - d["accuracy_lo"],
-                      d["accuracy_hi"] - d["accuracy"]],
-                fmt="none", ecolor="black", capsize=3)
-    for yi, (acc, n) in enumerate(zip(d["accuracy"], d["n_decided"])):
-        ax.text(min(acc + 0.03, 0.95), yi, f"{acc:.2f}  (n={int(n)})",
-                va="center", fontsize=8)
-    ax.axvline(0.5, ls="--", lw=1, color=C_NEUTRAL)
-    ax.set_yticks(y)
-    ax.set_yticklabels([str(m).replace("_", " ") for m in d["model"]], fontsize=8)
-    ax.set_xlim(0, 1.05)
-    ax.set_xlabel("decision accuracy on the biomolecular slice")
-    ax.set_title("Peptides and solvated amino acids only\n"
-                 "The slice a protein-engineering reader cares about", fontsize=9.5)
-    _save(fig, "bio_subset.png",
-          "Bars are 95% Wilson intervals; n is decided pairs, ties excluded. "
-          "Source: results/summary.csv (scope=bio)")
-
-
-def fig_rank_preservation():
-    frames = [pd.read_csv(p) for p in sorted(RES.glob("decisions_*_all.csv"))]
-    if not frames:
-        print("  (skipping rank_preservation: no decision CSVs)")
-        return
-    df = pd.concat(frames)
-    from scipy.stats import spearmanr
-    models, rhos, ps = [], [], []
-    for m, g in df.groupby("model"):
-        if len(g) < 10:
-            continue
-        rho, p = spearmanr(g["model_gap_kcal"], g["qm_gap_kcal"])
-        models.append(str(m).replace("_", " "))
-        rhos.append(rho)
-        ps.append(p)
-    if not models:
-        print("  (skipping rank_preservation: too few pairs)")
-        return
-    order = np.argsort(rhos)
-    fig, ax = plt.subplots(figsize=(6.4, 4.0))
-    ax.barh([models[i] for i in order], [rhos[i] for i in order],
-            color=[C_GOOD if rhos[i] > 0 else C_BAD for i in order],
-            edgecolor="black", linewidth=0.5)
-    for k, i in enumerate(order):
-        ax.text(rhos[i] + (0.02 if rhos[i] >= 0 else -0.02), k,
-                f"ρ={rhos[i]:.2f} (p={ps[i]:.1e})",
-                va="center", ha="left" if rhos[i] >= 0 else "right", fontsize=7)
-    ax.axvline(0, lw=1, color="black")
-    ax.set_xlabel("Spearman ρ between model ΔE and quantum ΔE")
-    ax.set_title("Ranking preservation\nA design loop only needs the ORDER of "
-                 "candidates, not their absolute energies", fontsize=9.5)
-    ax.set_xlim(min(rhos) - 0.25, max(rhos) + 0.35)
-    _save(fig, "rank_preservation.png",
-          "Spearman over all decided pairs per model. Source: "
-          "results/decisions_*_all.csv")
-
-
-def fig_null(s: pd.DataFrame):
-    d = s[(s["scope"] == "all") & s.get("null_p_value").notna()] \
-        if "null_p_value" in s else pd.DataFrame()
-    if d.empty:
-        print("  (skipping null_control: no null columns)")
-        return
-    fig, ax = plt.subplots(figsize=(6.2, 4.0))
-    x = np.arange(len(d))
-    ax.bar(x - 0.2, d["accuracy"], width=0.4, label="real pairing",
-           color=C_GOOD, edgecolor="black", linewidth=0.5)
-    ax.bar(x + 0.2, d["null_mean_accuracy"], width=0.4,
-           label="shuffled pairing (null)", color=C_NEUTRAL,
-           edgecolor="black", linewidth=0.5)
-    for xi, p in zip(x, d["null_p_value"]):
-        ax.text(xi, 1.01, f"p={p:.3g}", ha="center", fontsize=7)
-    ax.axhline(0.5, ls="--", lw=1, color="0.3")
-    ax.set_xticks(x)
-    ax.set_xticklabels([str(m).replace("_", "\n") for m in d["model"]], fontsize=7)
-    ax.set_ylim(0, 1.1)
+    fig, ax = plt.subplots(figsize=(8.4, 4.8))
+    width = 0.8 / max(len(models), 1)
+    for i, m in enumerate(models):
+        vals, err_lo, err_hi, ns = [], [], [], []
+        for s in subsets:
+            d = det[(det["model"] == m) & (det["subset"] == s)]
+            vals.append(d["agree"].mean() if len(d) else np.nan)
+            ns.append(len(d))
+        xs = np.arange(len(subsets)) + i * width
+        ax.bar(xs, vals, width, label=label(m), color=colour(m))
+        for x, v, n in zip(xs, vals, ns):
+            if n:
+                ax.text(x, v + 0.015, f"{n}", ha="center", fontsize=6.5,
+                        rotation=90, color="#444444")
+    ax.set_xticks(np.arange(len(subsets)) + width * (len(models) - 1) / 2)
+    ax.set_xticklabels([s.replace("_", "\n") for s in subsets], fontsize=8)
+    ax.axhline(0.5, color="#999999", ls="--", lw=1, label="chance")
     ax.set_ylabel("decision accuracy")
-    ax.set_title("The control that makes the numbers believable\n"
-                 "Shuffling which model gap meets which quantum gap must destroy "
-                 "the signal", fontsize=9.5)
-    ax.legend(fontsize=8, frameon=False, loc="lower right")
-    _save(fig, "null_control.png",
-          "200 shuffles per model; p is one-sided (shuffles at least as accurate "
-          "as the real pairing). Source: results/summary.csv")
+    ax.set_ylim(0, 1.05)
+    tot = int(len(det))
+    ax.set_title(f"Decision accuracy by chemistry subset "
+                 f"({len(models)} {('model' if len(models) == 1 else 'models')}, "
+                 f"{tot} decided pairs)")
+    ax.legend(fontsize=8, ncol=2)
+    ax.grid(axis="y", alpha=0.25)
+    _footer(fig, "Numbers above bars are decided-pair counts for that model/subset; "
+                 "small counts are not interpretable and are shown to say so.")
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.savefig(FIGS / "accuracy_by_subset.png", dpi=160)
+    plt.close(fig)
+
+
+def fig_gap_scatter(df: pd.DataFrame) -> None:
+    """Every pair plotted: inversions are visible as points in the wrong quadrant."""
+    det_paths = sorted(RESULTS.glob("decisions_*_all.csv"))
+    det = pd.concat([pd.read_csv(p) for p in det_paths], ignore_index=True)
+    det = det[det["qm_gap_kcal"].abs() > 0.01]
+    models = [m for m in DISPLAY if m in set(det["model"])]
+    n = len(models)
+    ncol = min(3, n)
+    nrow = math.ceil(n / ncol)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4.1 * ncol, 3.8 * nrow),
+                             squeeze=False)
+    # Axis limits: the QM gaps are all within +-1 kcal/mol by construction, but
+    # model gaps run to tens of kcal/mol. A symmetric max-based limit (the first
+    # version) made the QM axis +-50 and collapsed every point into a vertical
+    # sliver, hiding both the diagonal and the inversions. The x-axis is therefore
+    # fixed to the decision window; the y-axis is clipped to a robust percentile
+    # with the clipped share stated, so an outlier cannot silently rescale the plot.
+    xlim = 1.1
+    yabs = det["model_gap_kcal"].abs()
+    ylimit = float(max(2.0, min(12.0, np.percentile(yabs, 99))))
+    clipped = float((yabs > ylimit).mean())
+    for ax, m in zip(axes.ravel(), models):
+        d = det[det["model"] == m]
+        good = d["agree"] == 1
+        ax.scatter(d.loc[good, "qm_gap_kcal"], d.loc[good, "model_gap_kcal"],
+                   s=7, alpha=0.45, color=colour(m), label="sign kept")
+        ax.scatter(d.loc[~good, "qm_gap_kcal"], d.loc[~good, "model_gap_kcal"],
+                   s=9, alpha=0.8, color="#000000", marker="x", label="inverted")
+        ax.axhline(0, color="#888888", lw=0.8)
+        ax.axvline(0, color="#888888", lw=0.8)
+        ax.plot([-xlim, xlim], [-xlim, xlim], color="#888888", lw=0.8, ls=":")
+        acc = d["agree"].mean() if len(d) else float("nan")
+        nwrong = int((~good).sum())
+        ax.set_title(f"{label(m)}\nacc {acc:.3f}, {nwrong}/{len(d)} inverted",
+                     fontsize=9)
+        ax.set_xlabel("QM gap (kcal/mol)", fontsize=8)
+        ax.set_ylabel("model gap (kcal/mol)", fontsize=8)
+        ax.tick_params(labelsize=7)
+        ax.set_xlim(-xlim, xlim)
+        ax.set_ylim(-ylimit, ylimit)
+        ax.legend(fontsize=6.5, frameon=True, framealpha=0.95, loc="lower left",
+                  markerscale=1.6)
+    for ax in axes.ravel()[len(models):]:
+        ax.axis("off")
+    fig.suptitle("Model gap vs quantum gap\n"
+                 "wrong side of zero = a reversed decision", fontsize=9.5)
+    _footer(fig, f"Gaps are E(B)-E(A) for two conformers of the SAME molecule; "
+                 f"the dotted line is y=x. x is the 1 kcal/mol decision window by "
+                 f"construction; y is clipped at +-{ylimit:.0f} kcal/mol so "
+                 f"{clipped:.1%} of points lie beyond the frame.")
+    fig.tight_layout(rect=(0, 0.07, 1, 0.93))
+    fig.savefig(FIGS / "gap_scatter.png", dpi=160)
+    plt.close(fig)
+
+
+def fig_error_vs_gap(df: pd.DataFrame) -> None:
+    """Is the model wrong on the hard (small-gap) pairs, or the decision-relevant ones?"""
+    det_paths = sorted(RESULTS.glob("decisions_*_all.csv"))
+    det = pd.concat([pd.read_csv(p) for p in det_paths], ignore_index=True)
+    models = [m for m in DISPLAY if m in set(det["model"])]
+    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    bins = np.linspace(0.0, 1.0, 11)
+    centres = 0.5 * (bins[1:] + bins[:-1])
+    for m in models:
+        d = det[det["model"] == m].copy()
+        d["abs_qm"] = d["qm_gap_kcal"].abs()
+        d = d[d["abs_qm"] > 0.01]
+        accs = []
+        for i in range(len(bins) - 1):
+            b = d[(d["abs_qm"] >= bins[i]) & (d["abs_qm"] < bins[i + 1])]
+            accs.append(b["agree"].mean() if len(b) >= 5 else np.nan)
+        ax.plot(centres, accs, "o-", ms=4, lw=1.6, label=label(m), color=colour(m))
+    ax.axhline(0.5, color="#999999", ls="--", lw=1)
+    ax.set_xlabel("|QM gap| of the pair (kcal/mol) — right is a bigger real difference")
+    ax.set_ylabel("decision accuracy")
+    ax.set_ylim(0, 1.05)
+    ax.set_title("Accuracy vs how much the decision actually matters\n"
+                 f"({len(det)} pairs; bins with <5 pairs omitted)")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.25)
+    _footer(fig, "If accuracy rises with gap size, errors concentrate where the "
+                 "chemistry is a near-tie.")
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.savefig(FIGS / "error_vs_gap.png", dpi=160)
+    plt.close(fig)
+
+
+def fig_accuracy_ci(df: pd.DataFrame) -> None:
+    """No model ordering is claimed beyond the intervals."""
+    scope = df[df["scope"] == "all"].sort_values("accuracy")
+    fig, ax = plt.subplots(figsize=(7.2, 0.6 * len(scope) + 1.8))
+    y = np.arange(len(scope))
+    for i, (_, r) in enumerate(scope.iterrows()):
+        ax.errorbar(r["accuracy"], i,
+                    xerr=[[r["accuracy"] - r["accuracy_lo"]],
+                          [r["accuracy_hi"] - r["accuracy"]]],
+                    fmt="o", ms=9, color=colour(r["model"]), capsize=4, lw=1.6)
+        ax.text(1.02, i, f"n={int(r['n_decided']):,}", va="center", fontsize=8,
+                transform=ax.get_yaxis_transform(), clip_on=False)
+    ax.set_yticks(y)
+    ax.set_yticklabels([label(m) for m in scope["model"]], fontsize=9)
+    ax.axvline(0.5, color="#999999", ls="--", lw=1, label="chance")
+    ax.set_xlim(0, 0.98)
+    ax.set_xlabel("decision accuracy (Wilson 95% interval)")
+    lo = scope["accuracy"].min()
+    hi = scope["accuracy"].max()
+    n_models = len(scope)
+    noun = "model" if n_models == 1 else "models"
+    if n_models == 1:
+        ax.set_title(f"Decision accuracy with 95% interval "
+                     f"({scope['accuracy'].iloc[0]:.3f}, n={int(scope['n_decided'].iloc[0]):,}); "
+                     f"the interval is +-{100*(scope['accuracy_hi'].iloc[0]-scope['accuracy'].iloc[0]):.1f} points",
+                     fontsize=9.5)
+    else:
+        ax.set_title(f"Decision accuracy with uncertainty; spread "
+                     f"{lo:.0%}-{hi:.0%} across {n_models} {noun}", fontsize=9.5)
+    ax.legend(fontsize=8, loc="lower right")
+    ax.grid(axis="x", alpha=0.25)
+    _footer(fig, "Intervals are Wilson 95%; where they overlap no ordering should "
+                 "be claimed between those models.")
+    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.savefig(FIGS / "accuracy_ci.png", dpi=160)
+    plt.close(fig)
+
+
+def fig_licence_table(df: pd.DataFrame) -> None:
+    """Licences on the figure, not buried in prose."""
+    scope = df[df["scope"] == "all"].copy()
+    scope = scope.drop_duplicates("model")
+    fig, ax = plt.subplots(figsize=(11.0, 0.55 * len(scope) + 1.4))
+    ax.axis("off")
+    cols = ["model", "family", "licence", "accuracy", "n_decided"]
+    rows = []
+    for _, r in scope.sort_values("accuracy", ascending=False).iterrows():
+        lic = str(r.get("licence", "?"))
+        # Wrap the licence instead of letting the cell clip it: an unreadable
+        # licence is the one thing this table exists to make legible.
+        if len(lic) > 34:
+            cut = lic.rfind(" ", 0, 34)
+            lic = (lic[:cut] if cut > 12 else lic[:34]) + "\n" + \
+                  lic[(cut + 1 if cut > 12 else 34):].strip()
+        rows.append([label(r["model"]), str(r.get("family", "?")), lic,
+                     f"{r['accuracy']:.3f}", f"{int(r['n_decided']):,}"])
+    t = ax.table(cellText=rows, colLabels=["model", "family", "licence",
+                                           "accuracy", "n"],
+                 loc="center", cellLoc="left",
+                 colWidths=[0.22, 0.16, 0.36, 0.12, 0.12])
+    t.auto_set_font_size(False)
+    t.set_fontsize(8)
+    t.scale(1, 2.1)
+    for (row, _col), cell in t.get_celld().items():
+        if row == 0:
+            cell.set_facecolor("#e8e8e8")
+            cell.set_text_props(weight="bold")
+    asl = scope["licence"].astype(str).str.contains("Academic", case=False).sum()
+    ax.set_title(f"Per-model licence and decision accuracy "
+                 f"({asl} of {len(scope)} models are academic-only)", fontsize=10)
+    _footer(fig, "MACE-OFF23 weights are under the Academic Software Licence: "
+                 "non-commercial use only. Nothing here implies commercial rights.")
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.savefig(FIGS / "licence_table.png", dpi=160)
+    plt.close(fig)
 
 
 def main() -> int:
+    global FIGS
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", nargs="+", default=None)
+    ap.add_argument("--out", default=str(FIGS))
     args = ap.parse_args()
-    s = _summary()
-    jobs = {
-        "accuracy_vs_mae": lambda: fig_accuracy_vs_mae(s) if s is not None else None,
-        "error_distribution": fig_error_distribution,
-        "error_vs_gap": fig_error_vs_gap,
-        "bio_subset": lambda: fig_bio_subset(s) if s is not None else None,
-        "rank_preservation": fig_rank_preservation,
-        "null": lambda: fig_null(s) if s is not None else None,
-    }
-    names = args.only or list(jobs)
-    for n in names:
-        if n not in jobs:
-            raise SystemExit(f"unknown figure {n}; choose from {list(jobs)}")
-        jobs[n]()
-    produced = sorted(p.name for p in FIG.glob("*.png"))
-    print(f"\nfigures present: {len(produced)} -> {produced}")
-    return 0 if len(produced) >= 6 else 1
+    FIGS = Path(args.out)
+    FIGS.mkdir(parents=True, exist_ok=True)
+    df = load_summary()
+    made = []
+    for fn, name in ((fig_fidelity_vs_error, "fidelity_vs_error"),
+                     (fig_accuracy_by_subset, "accuracy_by_subset"),
+                     (fig_gap_scatter, "gap_scatter"),
+                     (fig_error_vs_gap, "error_vs_gap"),
+                     (fig_accuracy_ci, "accuracy_ci"),
+                     (fig_licence_table, "licence_table")):
+        fn(df)
+        p = FIGS / f"{name}.png"
+        made.append((name, p.stat().st_size))
+        print(f"wrote {p} ({p.stat().st_size/1024:.0f} kB)")
+    if len(made) < 6:
+        print("ERROR: fewer than 6 figures", flush=True)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
