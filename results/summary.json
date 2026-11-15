@@ -132,7 +132,7 @@
     "licence": "BSD",
     "wall_seconds": 17.676945209503174,
     "n_conformers_scored": 14763,
-    "n_conformers_failed": 0
+    "n_conformers_failed": 469
   },
   {
     "n_pairs": 6541,
@@ -159,6 +159,6 @@
     "licence": "BSD",
     "wall_seconds": 17.676945209503174,
     "n_conformers_scored": 14763,
-    "n_conformers_failed": 0
+    "n_conformers_failed": 469
   }
 ]
