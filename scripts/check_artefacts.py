@@ -8,7 +8,7 @@ mechanically checks the files agree with each other. Checks:
   1. the pair manifest and the conformer file describe the same conformers
      (every pair member exists; every conformer is used by some pair);
   2. every conformer's positions are plausible Angstrom geometry, not bohr
-     (a bohr pass-through shrinks every molecule ~2x — caught by bond-length
+     (a bohr pass-through STRETCHES every molecule ~1.89x — caught by bond-length
      range);
   3. every decision CSV row's `agree` flag is consistent with the signs of the
      gaps it stores;

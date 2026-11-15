@@ -16,8 +16,11 @@ wrong output on the first attempt:
 1. Conformers are STACKED datasets, not one subgroup per conformer. A reader that
    looks for a subgroup per conformer finds zero and silently reports one
    conformer per molecule — i.e. no decision pairs at all.
-2. Positions are in BOHR. Passing them to a calculator as Angstrom shrinks every
-   molecule by a factor of 0.529 and changes every energy, with no error raised.
+2. Positions are in BOHR. Passing them to a calculator as Angstrom STRETCHES every
+   molecule by a factor of 1/0.529 = 1.89 and changes every energy, with no error
+   raised. (This direction was written backwards in three places; measured on the
+   real data, omitting the conversion trips the "atom has no neighbour within
+   2.2 A" check, not the "bond too short" one.)
 
 `subset` is stored with a verbose upstream name ("SPICE Dipeptides Single Points
 Dataset v1.2"); it is slugged to a short tag so results can be grouped.

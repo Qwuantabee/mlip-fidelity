@@ -55,7 +55,7 @@ def test_stacked_layout_yields_every_conformer(tmp_path):
 
 
 def test_positions_are_converted_from_bohr_to_angstrom(tmp_path):
-    """If bohr were passed through as Angstrom every geometry is 0.53x too small,
+    """If bohr were passed through as Angstrom every geometry is 1.89x too LARGE,
     which changes the energy of every model without any error being raised."""
     assert abs(BOHR2ANG - 0.52917721067) < 1e-9
     mol = read_molecule(h5py.File(_stacked_archive(tmp_path), "r")["molA"], "molA")
