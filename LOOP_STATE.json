@@ -2,8 +2,8 @@
   "project": "mlip-fidelity",
   "repo": "https://github.com/Qwuantabee/mlip-fidelity",
   "status": "COMPLETE 2026-11-15 06:55 CT",
-  "step": 9,
-  "step_name": "SHIPPED",
+  "step": 99,
+  "step_name": "DONE",
   "result": {
     "question": "Do universal MLIPs preserve the chemical decision (which of two near-degenerate conformers is lower) even when their energy MAE is tiny?",
     "data": "SPICE 1.1.4, 16089 decision pairs from 1588 molecules, sub-1 kcal/mol, 404 charged molecules with SMILES-parsed charge/spin",
@@ -31,5 +31,6 @@
     "Overlapping chunk ranges double-counted 2400 conformers; merge now dedupes by id.",
     "Licences were guessed wrong (ORB is Apache-2.0, not ASL; MACE is MIT code + ASL weights)."
   ],
-  "next_action": "none. Optional future work is listed in the README limits (CCSD(T) reference, reaction energies instead of conformer pairs, per-assay clustered CIs)."
+  "next_action": "none. Optional future work is listed in the README limits (CCSD(T) reference, reaction energies instead of conformer pairs, per-assay clustered CIs).",
+  "checked_at": "2026-11-15T06:18:58-06:00"
 }

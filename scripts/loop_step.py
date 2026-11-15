@@ -93,8 +93,23 @@ def orb_coverage() -> float:
     return n_ok / max(n_conf, 1)
 
 
+def is_shipped(st: dict) -> bool:
+    """True once the ledger records the project as shipped.
+
+    Without this the loop had no terminal state: detect_step() kept returning
+    9 PUSH forever, so every fire re-ran the whole verification sweep and burned
+    its 1800 s budget until cron killed it ('timed out, last phase
+    model-call-started'). A long-horizon loop must know when to stop, or it
+    becomes a job that fails on schedule.
+    """
+    status = str(st.get("status", "")).upper()
+    return status.startswith("COMPLETE") or status.startswith("SHIPPED")
+
+
 def detect_step(st: dict) -> tuple[int, str]:
     """Ground truth wins over the recorded step: never trust a stale ledger."""
+    if is_shipped(st):
+        return 99, "DONE"
     if not spice_complete():
         return 1, "DOWNLOAD"
     if not (ROOT / "results" / "spice_inventory.json").exists():
@@ -130,6 +145,16 @@ def main() -> int:
 
     out = {"step": step, "step_name": name, "spice_complete": spice_complete(),
            "download_active": unit_active("spice-par"), "notes": []}
+
+    if name == "DONE":
+        # Exit immediately and cheaply: nothing to do, no model call needed. The
+        # automation payload also disables the job when it sees this, so a shipped
+        # project cannot keep firing.
+        out["next"] = "none - project shipped; disable this automation"
+        out["shipped"] = True
+        save(st)
+        print(json.dumps(out, indent=2))
+        return 0
 
     # Cheap, mechanical actions this script is allowed to take on its own.
     if name == "DOWNLOAD":
