@@ -54,12 +54,15 @@ def main() -> int:
     ap.add_argument("--bench", default=str(ROOT / "results" / "heldout_mpconf196.json"))
     ap.add_argument("--models", nargs="+", default=list(MODELS))
     ap.add_argument("--out", default=str(ROOT / "results"))
+    ap.add_argument("--tag", default="heldout",
+                    help="filename prefix, so two benchmarks do not overwrite "
+                         "each other's summaries")
     args = ap.parse_args()
 
     bench = json.loads(Path(args.bench).read_text())
     confs = bench["conformers"]
     ids = sorted(confs)
-    job = Path(args.out) / "_heldout_job.json"
+    job = Path(args.out) / f"_{args.tag}_job.json"
     job.write_text(json.dumps({"conformers": [confs[i] for i in ids]}))
     out_dir = Path(args.out)
 
@@ -126,7 +129,7 @@ def main() -> int:
                        "acc_under_1kcal_lo": lo, "acc_under_1kcal_hi": hi})
         summary.append(st)
 
-        with open(out_dir / f"heldout_decisions_{model}.csv", "w", newline="") as f:
+        with open(out_dir / f"{args.tag}_decisions_{model}.csv", "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
             w.writeheader()
             w.writerows(rows)
@@ -137,12 +140,13 @@ def main() -> int:
 
     if summary:
         keys = sorted({k for s in summary for k in s})
-        with open(out_dir / "heldout_summary.csv", "w", newline="") as f:
+        with open(out_dir / f"{args.tag}_summary.csv", "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
             w.writerows(summary)
-    (out_dir / "heldout_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"\n-> {out_dir/'heldout_summary.csv'}")
+    (out_dir / f"{args.tag}_summary.json").write_text(
+        json.dumps(summary, indent=2) + "\n")
+    print(f"\n-> {out_dir/(args.tag + '_summary.csv')}")
     return 0
 
 

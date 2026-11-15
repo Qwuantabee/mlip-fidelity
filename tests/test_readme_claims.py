@@ -214,22 +214,38 @@ def test_readme_headline_is_computed_not_handwritten(summary, readme):
 
 
 def test_heldout_table_matches_the_heldout_csv(readme):
-    """The MPCONF196 table must equal results/heldout_summary.csv.
+    """The held-out table must equal the Folmsbee summary, and MPCONF196 too.
 
-    Added with the held-out benchmark: a second results table is a second chance
-    for a number to rot, and the sub-kcal column is the one that carries the
-    contamination finding.
+    TEST-CHANGE (2026-11-15): this test read results/heldout_summary.csv, which is
+    the MPCONF196 run. That set has only 30 sub-kcal pairs from 7 compounds - a
+    cluster bootstrap gives [0.14, 0.71] for MACE, i.e. it cannot resolve anything
+    - so the README's held-out table was switched to the well-powered Folmsbee set
+    (22,379 pairs, 690 compounds) and the MPCONF196 numbers moved into the prose
+    as a labelled withdrawal. The assertion was reading the wrong artefact, not
+    asserting something wrong, so the INTENT is unchanged: every held-out number
+    printed must equal a committed CSV. It now checks BOTH.
     """
-    csv_path = ROOT / "results" / "heldout_summary.csv"
-    if not csv_path.exists():
-        pytest.skip("no heldout_summary.csv; run scripts/score_heldout.py")
     import pandas as pd
-    ho = pd.read_csv(csv_path).set_index("model")
+
+    fb_path = ROOT / "results" / "heldout_folmsbee_summary.csv"
+    mp_path = ROOT / "results" / "heldout_summary.csv"
+    if not fb_path.exists() or not mp_path.exists():
+        pytest.skip("held-out summaries missing; run scripts/score_heldout.py")
+
+    fb = pd.read_csv(fb_path).set_index("model")
     rows = _heldout_rows(readme)
-    assert rows, "could not find the MPCONF196 table in the README"
+    assert rows, "could not find the held-out table in the README"
     for model in ("orb_orbmol_v1_conservative", "mace_off_small", "rdkit_mmff"):
         assert model in rows, f"{model} missing from the held-out table"
-        want = f"{ho.loc[model, 'acc_under_1kcal']:.3f}"
+        want = f"{fb.loc[model, 'acc_under_1kcal']:.3f}"
         assert want in " ".join(rows[model]), (
             f"held-out table row for {model} does not contain {want}: "
             f"{rows[model]}")
+
+    # The withdrawn MPCONF196 figures are still quoted in the prose, so they are
+    # still checked - a withdrawal is not permission for the number to drift.
+    mp = pd.read_csv(mp_path).set_index("model")
+    mace_small = f"{mp.loc['mace_off_small', 'acc_under_1kcal']:.3f}"
+    assert mace_small in readme, (
+        f"the withdrawn MPCONF196 value {mace_small} should still appear in the "
+        f"README's withdrawal paragraph")
