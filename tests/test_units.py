@@ -73,3 +73,45 @@ def test_model_gap_tracks_qm_gap_with_slope_near_one(model):
     assert 0.3 < slope < 3.0, (
         f"{model}: model gap vs QM gap slope {slope:.2f} is outside [0.3, 3.0] - "
         "almost certainly a unit error (23.06x) or a reference-zero mismatch")
+
+
+def test_classical_energy_is_converted_to_ev_at_the_source():
+    """A revert of the MMFF unit fix must fail HERE, not just in the CSVs.
+
+    The slope test above reads results/decisions_*.csv, so it only notices a
+    regression after someone re-runs the sweep and re-scores. A code reviewer
+    pointed out that reverting `energies_classical` to store kcal/mol left all 49
+    tests green. This calls the production function directly and compares it to
+    RDKit's own kcal/mol value, so the conversion is pinned at the source.
+    """
+    rdkit = pytest.importorskip("rdkit")
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem import AllChem
+    RDLogger.DisableLog("rdApp.*")
+    import importlib
+    sys.path.insert(0, str(ROOT / "scripts"))
+    run_model = importlib.import_module("run_model")
+
+    m = Chem.AddHs(Chem.MolFromSmiles("CCO"))
+    AllChem.EmbedMolecule(m, randomSeed=0)
+    AllChem.MMFFOptimizeMolecule(m)
+    kcal = AllChem.MMFFGetMoleculeForceField(
+        m, AllChem.MMFFGetMoleculeProperties(m)).CalcEnergy()
+
+    rec = {
+        "id": "probe",
+        "atomic_numbers": [int(zz) for zz in m.GetAtomicNum()] if False else
+                          [a.GetAtomicNum() for a in m.GetAtoms()],
+        "positions": [list(m.GetConformer().GetAtomPosition(i))
+                      for i in range(m.GetNumAtoms())],
+        "charge": 0,
+    }
+    out = run_model.energies_classical("rdkit_mmff", [rec])[0]
+    assert out == out, "probe failed to produce an energy"
+    # eV, not kcal/mol: the two differ by exactly 23.0605x.
+    assert abs(out - kcal / 23.0605419) < 1e-6, (
+        f"stored {out} but RDKit says {kcal} kcal/mol; the runner must store eV "
+        f"(expected {kcal / 23.0605419:.6f}). A stored kcal/mol value here is the "
+        f"23x inflation bug.")
+    assert not abs(out - kcal) < 1e-6, (
+        "the stored value equals RDKit's raw kcal/mol - the conversion is missing")
