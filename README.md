@@ -215,7 +215,7 @@ python scripts/par_fetch.py <zenodo-url> SPICE-1.1.4.hdf5   # 16 GB, resumable
 python scripts/spice_inventory.py --archive SPICE-1.1.4.hdf5
 python scripts/build_pairs.py --archive SPICE-1.1.4.hdf5 --max-per-subset 300 \
     --max-pairs-per-molecule 12 --max-conformers-per-molecule 12
-python scripts/sweep_all.sh                                 # one launcher, one GPU
+bash scripts/sweep_all.sh                                   # one launcher, one GPU
 python scripts/verify_completeness.py --write               # gate: artefact coverage
 python scripts/score.py --require-complete
 python scripts/make_figures.py
