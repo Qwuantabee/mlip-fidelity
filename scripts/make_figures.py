@@ -516,7 +516,7 @@ def fig_heldout(_df: pd.DataFrame | None = None) -> None:
 
     _footer(fig, "Left: in-sample SPICE (pairs < 1 kcal/mol) against Folmsbee & "
                  "Hutchison 2021 (DLPNO-CCSD(T), sub-kcal pairs only), with 95% "
-                 "Wilson intervals. Right: the shift with MMFF94's +0.024 "
+                 f"Wilson intervals. Right: the shift with MMFF94's {offset:+.3f} "
                  "subtracted, since MMFF94 trained on neither set and therefore "
                  "measures how much easier this held-out slice is. A near-zero bar "
                  "means no detectable in-sample inflation, so MMFF94's own bar "

@@ -12,8 +12,12 @@ different question - does the model preserve ordering at *any* gap size - and th
 two are reported side by side rather than blended.
 
 Outputs:
-  results/heldout_decisions_<model>.csv   one row per pair
-  results/heldout_summary.csv             one row per model
+  results/<tag>_decisions_<model>.csv   one row per pair
+  results/<tag>_summary.csv             one row per model
+  results/<tag>_raw_<model>.json        per-conformer energies (eV) and the charge
+                                        and spin each conformer was run with, so
+                                        the decisions can be re-derived without a
+                                        GPU and the inputs audited
 """
 from __future__ import annotations
 
@@ -57,13 +61,19 @@ def main() -> int:
     ap.add_argument("--tag", default="heldout",
                     help="filename prefix, so two benchmarks do not overwrite "
                          "each other's summaries")
+    ap.add_argument("--from-raw", action="store_true",
+                    help="re-score from the committed <tag>_raw_<model>.json "
+                         "energies instead of running the models (no GPU); the "
+                         "raw file must carry the same ids, charges and spins as "
+                         "the bench")
     args = ap.parse_args()
 
     bench = json.loads(Path(args.bench).read_text())
     confs = bench["conformers"]
     ids = sorted(confs)
     job = Path(args.out) / f"_{args.tag}_job.json"
-    job.write_text(json.dumps({"conformers": [confs[i] for i in ids]}))
+    job_confs = [confs[i] for i in ids]
+    job.write_text(json.dumps({"conformers": job_confs}))
     out_dir = Path(args.out)
 
     summary = []
@@ -71,26 +81,58 @@ def main() -> int:
         if model not in MODELS:
             print(f"skip unknown model {model}")
             continue
-        py = venv_python(MODELS[model])
-        cmd = [py, str(ROOT / "scripts" / "run_model.py"),
-               "--model", model, "--input", str(job), "--device", "cuda"]
-        print(f"-- {model} on {len(ids)} held-out conformers ...", flush=True)
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=6 * 3600)
-        payload = None
-        for line in reversed(r.stdout.strip().splitlines()):
-            line = line.strip()
-            if line.startswith("{") and line.endswith("}"):
-                try:
-                    payload = json.loads(line)
-                    break
-                except json.JSONDecodeError:
-                    continue
-        if payload is None or not payload.get("ok"):
-            err = (payload or {}).get("error", r.stderr[-400:])
-            print(f"   FAILED: {err}")
-            summary.append({"model": model, "error": str(err)[:200]})
-            continue
+        raw_path = out_dir / f"{args.tag}_raw_{model}.json"
+        if args.from_raw:
+            saved = json.loads(raw_path.read_text())
+            if (saved["ids"] != [c["id"] for c in job_confs]
+                    or saved["charge"] != [int(c.get("charge", 0)) for c in job_confs]
+                    or saved["spin"] != [int(c.get("spin", 1)) for c in job_confs]):
+                raise SystemExit(f"{raw_path.name} was computed for different "
+                                 "conformers, charges or spins than the bench")
+            payload = {"ok": True, "ids": saved["ids"],
+                       "energies_ev": saved["energies_ev"],
+                       "meta": saved.get("meta"), "version": saved.get("version")}
+            print(f"-- {model}: re-scoring {raw_path.name} (no model run)", flush=True)
+        else:
+            py = venv_python(MODELS[model])
+            cmd = [py, str(ROOT / "scripts" / "run_model.py"),
+                   "--model", model, "--input", str(job), "--device", "cuda"]
+            print(f"-- {model} on {len(ids)} held-out conformers ...", flush=True)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=6 * 3600)
+            payload = None
+            for line in reversed(r.stdout.strip().splitlines()):
+                line = line.strip()
+                if line.startswith("{") and line.endswith("}"):
+                    try:
+                        payload = json.loads(line)
+                        break
+                    except json.JSONDecodeError:
+                        continue
+            if payload is None or not payload.get("ok"):
+                err = (payload or {}).get("error", r.stderr[-400:])
+                print(f"   FAILED: {err}")
+                summary.append({"model": model, "error": str(err)[:200]})
+                continue
 
+        if len(payload["energies_ev"]) != len(payload["ids"]) or \
+                payload["ids"] != [c["id"] for c in job_confs]:
+            raise SystemExit(f"{model}: run_model answered for a different "
+                             "conformer list than it was given")
+        # Failures are the NaN count. run_model's own n_failed counts only ML
+        # exceptions, so the classical baseline reported 0 failed conformers
+        # while 668 (now 115) of its energies were NaN.
+        n_nan = int(sum(1 for e in payload["energies_ev"] if e != e))
+        n_finite = len(payload["energies_ev"]) - n_nan
+        if not args.from_raw:
+            raw_out = {
+                "model": model, "bench": Path(args.bench).name,
+                "meta": payload.get("meta"), "version": payload.get("version"),
+                "ids": payload["ids"], "energies_ev": payload["energies_ev"],
+                "charge": [int(c.get("charge", 0)) for c in job_confs],
+                "spin": [int(c.get("spin", 1)) for c in job_confs],
+                "n_ok": n_finite, "n_failed": n_nan,
+            }
+            raw_path.write_text(json.dumps(raw_out) + "\n")
         emap = {i: e for i, e in zip(payload["ids"], payload["energies_ev"]) if e == e}
         rows, qm, ml = [], [], []
         absent = 0
@@ -116,8 +158,8 @@ def main() -> int:
 
         st = decision_scores(np.array(qm), np.array(ml))
         st.update({"model": model, "n_absent_pairs": absent,
-                   "scored_conformers": payload.get("n_ok"),
-                   "failed_conformers": payload.get("n_failed"),
+                   "scored_conformers": n_finite,
+                   "failed_conformers": n_nan,
                    "licence": payload.get("meta", {}).get("licence", "?")})
         # The held-out set spans every gap size, so also report the hard slice.
         small = [r for r in rows if abs(r["ref_kcal"]) <= 1.0]

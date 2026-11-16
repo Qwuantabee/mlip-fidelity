@@ -108,17 +108,30 @@ slice where they overlap with SPICE: reference gaps under 1 kcal/mol.
 
 | model | SPICE (in-sample) | **Folmsbee held out** | shift | beyond difficulty |
 |---|---|---|---|---|
-| ORB-omol v1 | 0.900 | **0.823** (0.818–0.828) | −0.077 | **−0.101** |
-| MACE-OFF23 | 0.760 | **0.773** (0.768–0.779) | +0.013 | **−0.010** |
-| MMFF94 | 0.601 | **0.625** (0.618–0.632) | +0.024 | — (control) |
+| ORB-omol v1 | 0.900 | **0.833** (0.828–0.837) | −0.068 | **−0.089** |
+| MACE-OFF23 | 0.760 | **0.773** (0.768–0.779) | +0.013 | **−0.008** |
+| MMFF94 | 0.601 | **0.622** (0.616–0.629) | +0.021 | — (control) |
 
-MMFF94 has never seen either dataset, so its +0.024 is a measure of how much
+**Correction (review R2, 2026-11-16).** The first version of this table ran the
+74 charged Folmsbee compounds (1,943 of the 22,379 pairs; +1: 60, −1: 10, +2: 4)
+as neutral singlets: the builder hard-coded charge 0 although the dataset lists
+each ion's charge in `geometries/CHG-charges.txt`. With the true charges ORB-omol,
+which takes the charge as input, goes from 0.668 to 0.794 on those compounds'
+1,887 decided pairs and from 0.823 to 0.833 overall; MMFF94 can now perceive
+bonds for most of the ions and scores 21,930 pairs instead of 20,169 (0.625 →
+0.622); MACE-OFF23 takes no charge input and is unchanged. No compound had to be
+excluded for want of a charge. ORB's energies are not bit-reproducible on the
+GPU: re-running the unchanged neutral compounds moved 187 of their 20,436 pair
+decisions (largest gap change 0.04 kcal/mol), which is why the overall figure is
+0.833 rather than the 0.834 a charged-only re-run predicted.
+
+MMFF94 has never seen either dataset, so its +0.021 is a measure of how much
 easier this particular held-out slice is. Subtracting that offset isolates
 contamination from difficulty:
 
-- **ORB-omol loses about 10 points beyond difficulty** — evidence of in-sample
+- **ORB-omol loses about 9 points beyond difficulty** — evidence of in-sample
   inflation, consistent with OMol25's documented inclusion of SPICE2.
-- **MACE-OFF23 shows no detectable inflation** (−0.010) despite training on ~95%
+- **MACE-OFF23 shows no detectable inflation** (−0.008) despite training on ~95%
   of SPICE. Its in-sample 0.760 transfers. That is the opposite of what I
   expected, and it is what the data say.
 
@@ -144,8 +157,8 @@ finding.
 ### What this leaves standing
 
 On 22,379 genuinely unseen sub-kcal pairs, **ORB-omol still orders near-degenerate
-conformers at 0.823 against MMFF94's 0.625** — an ML potential does beat a force
-field out of sample, just by about 20 points rather than the 30 the in-sample
+conformers at 0.833 against MMFF94's 0.622** — an ML potential does beat a force
+field out of sample, just by about 21 points rather than the 30 the in-sample
 table implied. That is the defensible claim.
 
 ## Why the null control matters
