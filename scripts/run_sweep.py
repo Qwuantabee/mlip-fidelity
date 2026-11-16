@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import subprocess
 import sys
@@ -81,8 +82,42 @@ def chunk_path(out_dir: Path, model: str, lo: int, hi: int) -> Path:
     return out_dir / f"chunk_{model}_{lo:06d}_{hi:06d}.json"
 
 
-def load_cached_chunk(path: Path, want_ids: list[str]) -> dict | None:
-    """Return the cached chunk only if it holds exactly the requested slice."""
+def chunk_input_hash(model: str, recs: list[dict]) -> str:
+    """sha256 of everything a model sees for one chunk, plus the model name.
+
+    Per conformer: id, atomic_numbers, positions, charge, spin, serialised as
+    canonical JSON (sorted keys, no whitespace). charge/spin default to 0/1, as
+    run_model.py does. A chunk cached under the same ids but computed from
+    different geometry (a review scaled one conformer by 1.15 and still got
+    "(cached)" with a stale 1.887 eV instead of 14.858 eV) no longer matches.
+    """
+    body = {"model": model, "conformers": [
+        {"id": r["id"], "atomic_numbers": r["atomic_numbers"],
+         "positions": r["positions"], "charge": int(r.get("charge", 0)),
+         "spin": int(r.get("spin", 1))} for r in recs]}
+    blob = json.dumps(body, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def chunk_older_than(path: Path, conformers_path: Path | None) -> bool:
+    """True if the chunk file predates the conformers.jsonl it was computed from."""
+    if conformers_path is None or not Path(conformers_path).exists():
+        return False
+    return path.stat().st_mtime < Path(conformers_path).stat().st_mtime
+
+
+def load_cached_chunk(path: Path, want_ids: list[str], recs: list[dict] | None = None,
+                      model: str | None = None,
+                      conformers_path: Path | None = None) -> dict | None:
+    """Return the cached chunk only if it holds exactly the requested slice.
+
+    ids alone are not enough. When `recs` (the current slice) is given, the
+    chunk must carry an input_sha256 equal to chunk_input_hash(model, recs) and
+    the same model name; a chunk without a hash cannot prove what it was
+    computed from and is recomputed. When `conformers_path` is given, a chunk
+    older than that file is stale and recomputed. main() always passes both;
+    callers that pass neither get the legacy ids-only check.
+    """
     if not path.exists():
         return None
     try:
@@ -95,6 +130,28 @@ def load_cached_chunk(path: Path, want_ids: list[str]) -> dict | None:
         print(f"   ignoring stale cache {path.name}: ids are not this slice",
               flush=True)
         return None
+    if len(saved.get("energies_ev", [])) != len(want_ids):
+        print(f"   ignoring cache {path.name}: {len(saved.get('energies_ev', []))} "
+              f"energies for {len(want_ids)} ids", flush=True)
+        return None
+    if chunk_older_than(path, conformers_path):
+        print(f"   ignoring stale cache {path.name}: older than "
+              f"{Path(conformers_path).name}", flush=True)
+        return None
+    if recs is not None:
+        if model is not None and saved.get("model") != model:
+            print(f"   ignoring cache {path.name}: model {saved.get('model')!r} "
+                  f"is not {model!r}", flush=True)
+            return None
+        got = saved.get("input_sha256")
+        if not got:
+            print(f"   ignoring cache {path.name}: no input hash, cannot verify "
+                  f"the geometry it was computed from", flush=True)
+            return None
+        if got != chunk_input_hash(model or saved.get("model", ""), recs):
+            print(f"   ignoring stale cache {path.name}: inputs changed since it "
+                  f"was computed (input hash mismatch)", flush=True)
+            return None
     return saved
 
 
@@ -228,7 +285,8 @@ def main() -> int:
             # were only merged at the end; a crash must cost one chunk, not the run.
             want_ids = [c["id"] for c in recs[lo:hi]]
             part_raw = chunk_path(out_dir, model, lo, hi)
-            saved = load_cached_chunk(part_raw, want_ids)
+            saved = load_cached_chunk(part_raw, want_ids, recs=recs[lo:hi],
+                                      model=model, conformers_path=conf_path)
             if saved is not None:
                 ids_all += saved["ids"]
                 energies_all += saved["energies_ev"]
@@ -249,6 +307,16 @@ def main() -> int:
                 err = res.get("error", "failed")
                 print(f"   FAILED: {err[:200]}", flush=True)
                 break
+            if (list(res.get("ids", [])) != want_ids
+                    or len(res.get("energies_ev", [])) != len(want_ids)):
+                ok = False
+                err = (f"runner returned {len(res.get('ids', []))} ids / "
+                       f"{len(res.get('energies_ev', []))} energies for a "
+                       f"{len(want_ids)}-conformer slice")
+                print(f"   FAILED: {err}", flush=True)
+                break
+            res["model"] = model
+            res["input_sha256"] = chunk_input_hash(model, recs[lo:hi])
             part_raw.write_text(json.dumps(res))
             ids_all += res["ids"]
             energies_all += res["energies_ev"]
