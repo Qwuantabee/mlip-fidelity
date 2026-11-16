@@ -9,3 +9,8 @@ results/_job_mace_off_small_*.json
 results/.sweep.lock
 results/_heldout_job.json
 results/_heldout_folmsbee_job.json
+# The rule above only matches results/ root; nested scratch must be excluded too,
+# which is how 23 MB of unreferenced quarantine chunks got committed.
+results/**/_job*.json
+results/**/chunk_*.json
+results/quarantine_badchunks/
