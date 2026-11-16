@@ -16,7 +16,8 @@ What it provides:
 Units, verified not assumed: the shortest contacts in the raw coordinates are
 N-H at 1.922 and C-H at 2.065. Those are correct only as BOHR (1.017 A and
 1.093 A); as Angstrom they would be impossible. Same trap as SPICE, so the same
-conversion, and check_artefacts re-derives it.
+conversion. (scripts/check_artefacts.py does not read the held-out artefacts; an
+earlier version of this docstring said it re-derived this conversion.)
 
 Output: results/heldout_mpconf196.json
   {"pairs": [{id_a, id_b, compound, ref_kcal}], "conformers": {...}}

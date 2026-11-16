@@ -26,15 +26,18 @@ lower?* Score the sign. Compare that to the model's own energy error.
 
 | model | licence | scored conformers | decided pairs | **decision accuracy** (95% CI) | median \|ΔE\| error | null control p |
 |---|---|---|---|---|---|---|
-| **ORB-omol v1 (conservative)** | Apache-2.0 | 15,232 | 15,991 | **0.900** (0.895–0.905) | 0.15 kcal/mol | 0.005 |
-| MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.760** (0.753–0.766) | 0.45 kcal/mol | 0.005 |
-| MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.601 (0.594–0.609) | 1.61 kcal/mol | 0.005 |
+| **ORB-omol v1 (conservative)** | Apache-2.0 | 15,232 | 15,991 | **0.900** (0.895–0.905) | 0.15 kcal/mol | < 0.005 |
+| MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.760** (0.753–0.766) | 0.45 kcal/mol | < 0.005 |
+| MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.601 (0.594–0.609) | 1.61 kcal/mol | < 0.005 |
 
 **Read this table as an in-sample measurement.** Two of the three models trained
 on SPICE — MACE-OFF23 on ~95% of v1, ORB-omol via OMol25's documented SPICE2 — so
 these numbers are fidelity to their own training data, not generalisation. The
-held-out test further down is where generalisation is measured, and it changes
-which model the result favours. Only MMFF94 was ever a clean row.
+held-out test further down is where generalisation is measured: out of sample the
+order is unchanged (ORB > MACE > MMFF94), but ORB's lead over MACE shrinks from 14
+to 6 points. Only MMFF94 was ever a clean row. The intervals are Wilson intervals
+(about 1.4x too narrow once pairs are clustered by molecule, see Limits), and the
+null-control p is the floor 200 shuffles can report (1/201), not a measured value.
 
 All three rows are recomputed from the committed `results/decisions_*.csv` by
 `scripts/score.py`, and a model only appears here if
@@ -58,15 +61,16 @@ Four things worth taking from that table.
    baseline's units corrected (see "What went wrong"), the three models are
    monotone in *every* error measure: median gap error 0.15 / 0.45 / 1.61 kcal/mol
    gives accuracy 0.900 / 0.760 / 0.601. Pairwise differences are robust to
-   clustering by molecule — ORB−MACE +0.157 [0.149, 0.166], MACE−MMFF +0.185
-   [0.174, 0.197] — so this is not a tie. **I do not fit a trend line:** three
+   clustering by molecule — on the 15,578 pairs all three models scored, with a
+   bootstrap over their 1,530 molecules, ORB−MACE +0.144 [0.135, 0.152] and
+   MACE−MMFF +0.161 [0.150, 0.171] — so this is not a tie. **I do not fit a trend line:** three
    points cannot distinguish a curve from a coincidence, and an earlier draft of
    this README claimed the two were independent, which the corrected units
    refuted.
 
 4. **The biomolecular slice is consistently harder.** Every model drops on
    peptides and solvated amino acids: ORB 0.900 → **0.855**, MACE 0.760 → **0.647**,
-   MMFF94 0.563 → 0.552. See
+   MMFF94 0.601 → 0.552. See
    [`figures/accuracy_by_subset.png`](figures/accuracy_by_subset.png). Part of that
    is composition, not chemistry — see Limits.
 
@@ -76,8 +80,9 @@ Four things worth taking from that table.
 
 Pair orientation is arbitrary (whichever conformer happened to be index A), and
 the QM gaps are not symmetric: **always guessing "B is higher" scores 0.534** on
-these pairs. Against that constant, the excess over guessing is ORB **+0.366**,
-MACE **+0.212**, and MMFF **+0.067**.
+these pairs. Against that constant, scored on each model's own pairs (where it
+reads 0.534 for all three), the excess over guessing is ORB **+0.366**,
+MACE **+0.226**, and MMFF **+0.067**.
 
 MMFF94's edge is small but not noise: it beats the constant predictor on 4,125
 pairs and loses on 3,079 (McNemar-style sign test p ≈ 6e-35). So the classical
@@ -125,34 +130,58 @@ GPU: re-running the unchanged neutral compounds moved 187 of their 20,436 pair
 decisions (largest gap change 0.04 kcal/mol), which is why the overall figure is
 0.833 rather than the 0.834 a charged-only re-run predicted.
 
-MMFF94 has never seen either dataset, so its +0.021 is a measure of how much
-easier this particular held-out slice is. Subtracting that offset isolates
-contamination from difficulty:
+The intervals in the table are Wilson intervals, which treat the ~32 pairs per
+compound as independent. They are not: resampling whole compounds (cluster
+bootstrap, 4,000 draws) widens them to ORB [0.823, 0.841], MACE [0.761, 0.784]
+and MMFF94 [0.607, 0.637], a design effect of 3.4–5.2. The Folmsbee column also
+counts every sub-kcal pair, including 567 near-ties (|gap| ≤ 0.01 kcal/mol; 553
+for MMFF94) that the SPICE column excludes; with ties excluded the held-out
+figures are 0.840 / 0.780 / 0.624.
 
-- **ORB-omol loses about 9 points beyond difficulty** — evidence of in-sample
-  inflation, consistent with OMol25's documented inclusion of SPICE2.
-- **MACE-OFF23 shows no detectable inflation** (−0.008) despite training on ~95%
-  of SPICE. Its in-sample 0.760 transfers. That is the opposite of what I
-  expected, and it is what the data say.
+MMFF94 has never seen either dataset, so I use its +0.021 as an estimate of how
+much easier this held-out slice is, and subtract it. That is an assumption, not a
+measurement: it treats slice difficulty as the same for every model. Intervals
+below resample SPICE molecules and Folmsbee compounds independently (4,000 draws).
 
-Accuracy by gap bin agrees: on Folmsbee, MACE beats its own in-sample SPICE rate
-in *every* bin (0.595 vs 0.533 under 0.1 kcal/mol, 0.769 vs 0.623 at 0.1–0.25),
-so its SPICE number was never inflated.
+- **ORB-omol loses about 9 points beyond difficulty** (−0.089, 95% CI −0.107 to
+  −0.070) — consistent with in-sample inflation and with OMol25's documented
+  inclusion of SPICE2.
+- **MACE-OFF23: no inflation detected** (−0.008, 95% CI −0.027 to +0.012). That
+  is absence of evidence, not evidence of absence: with a standard error of
+  0.010 this design can only detect an inflation larger than about 0.03 at 80%
+  power.
+
+The difficulty offset is the weak link. Folmsbee's sub-kcal pairs sit much closer
+to ties than SPICE's, ML accuracy rises steeply with the gap while MMFF94's is
+nearly flat, MMFF94 scores a different pair set, and the reference level changes
+from ωB97M-D3(BJ) (MACE-OFF23's training level) to DLPNO-CCSD(T). A reviewer
+showed that equally defensible re-specifications (gap-matched, or restricted to
+MACE-OFF23's own training domain) push MACE-OFF23's figure to either side of
+zero, so its size is not identified.
+
+The gap bins cannot separate the two either. In the 0.1–0.25 kcal/mol bin MACE
+scores 0.769 on Folmsbee against 0.623 on SPICE — but MMFF94, which trained on
+neither set, also scores higher on Folmsbee in every bin (0.606 vs 0.515 in the
+same one).
 
 **The MPCONF196 result I published earlier is withdrawn.** I reported that
 MACE's sub-kcal accuracy "collapses out of sample, 0.760 → 0.467, p = 0.0008."
 That p-value was computed over 30 pairs as if they were 30 independent
 observations. They are not: the 30 pairs come from **7 compounds, 26 of them from
-3 macrocycles**. A cluster bootstrap over compounds gives a 95% interval of
+3 compounds** (FGG114 10, GGF01 9, GFA01 7). A cluster bootstrap over compounds gives a 95% interval of
 [0.14, 0.71] — consistent with almost anything. At n = 30 that benchmark cannot
 distinguish a real drop from noise, and the well-powered set contradicts it. The
 number is kept here, labelled, so it cannot be misquoted again.
 
-Why the two differ is not fully resolved. MPCONF196 is macrocycles and peptides
-(median 32 heavy atoms, 15 conformers larger than anything in Folmsbee); Folmsbee
-is drug-like molecules (median 22). A size effect would explain it and is
-plausible, but I have not demonstrated one, so it is a hypothesis rather than a
-finding.
+Why the two differ is not fully resolved, but an earlier version of this
+paragraph called those three compounds macrocycles, and they are not: their
+formulas (C13H17N3O4, C13H17N3O4, C14H19N3O4) are those of linear tripeptides (a
+cyclic one would have lost another H2O; I checked formulas, not geometries). That
+points to composition rather than size. MACE-OFF23's own in-sample accuracy on
+SPICE dipeptides is 0.648 (6,510 pairs), its weakest large subset, so these 30
+pairs probe its known peptide weakness. MPCONF196 as a whole is larger (median 32
+heavy atoms, 15 conformers larger than anything in Folmsbee, whose median is 22),
+but a size effect is not needed to explain these 30 pairs.
 
 ### What this leaves standing
 
@@ -166,9 +195,12 @@ table implied. That is the defensible claim.
 Every accuracy above is checked against the answer-leaking failure mode: shuffle
 which model gap is paired with which quantum gap, 200 times, and rescore. If the
 pipeline were leaking, shuffled pairs would score as well as real ones. Shuffled
-accuracy collapses to ~0.49 for every model (p = 0.005 in all six rows), which is
-what makes the real numbers mean anything. The null is not an optional extra — it
-is the only reason to believe a 0.900.
+accuracy collapses to 0.498–0.502 for every model, and no shuffle reached the
+real accuracy in any of the six rows: p < 0.005, where 1/201 ≈ 0.005 is the
+smallest p-value 200 shuffles can report — a floor, not a measurement. What the
+shuffle shows is that the labels carry signal and the pipeline does not leak the
+answer. It does not by itself make 0.900 right; the raw-energy recomputation in
+`scripts/check_artefacts.py` and the held-out test carry more of that weight.
 
 ## Where the failures live
 
@@ -284,21 +316,23 @@ non-commercial weights permissive after a rewording.
   to point it out:
   - **MACE-OFF23** is trained on ~95% of SPICE v1 (MACE-OFF paper, arXiv 2312.15211,
     Sec. II.2), so scoring it on SPICE 1.1.4 is mostly an **in-sample** evaluation.
-    Its 0.747 is an in-sample number that is still only 0.747.
+    Its 0.760 is an in-sample number that is still only 0.760.
   - **ORB-omol** is trained on OMol25, whose community domain documents SPICE2 — a
     superset of SPICE 1.x. So it is also very likely in-sample at the molecule
     level; geometry-level overlap I cannot verify.
   - **MMFF94** is the only clean out-of-sample row.
   - Read the ML accuracies as *fidelity to their own training data*, not as
-    generalisation. A held-out test on an independent conformer benchmark
-    (Folmsbee, MPCONF196, TorsionNet206) is the missing experiment.
+    generalisation. The held-out test above (Folmsbee, with MPCONF196 as a small
+    check) is the experiment that addresses this; TorsionNet206 has not been run.
 - **Not every pair is a conformer pair, and the wording above overstates it.**
   3,149 of 16,089 pairs (19.6%) come from multi-component systems: the DES370K
   subset is hydrogen-bonded **dimers** (`C=C.[Na+]`), so those pairs are
   intermolecular geometry changes, and the 21 ion-pair molecules are diatomics
   scanned over 2.5-7.4 Å. The ion-pair row is a mechanical failure, not a chemistry
-  failure — all three models return exact-zero gaps beyond ~6 Å, consistent with a
-  graph cutoff — and ORB scores 0.126 there. Excluding those two subsets changes
+  failure — the two ML models return exact-zero gaps there (ORB on 121 of its 143
+  decided ion-pair pairs, MACE-OFF23 on all 74 of its), consistent with a graph
+  cutoff, and ORB scores 0.126 there. MMFF94 has no cutoff now that its
+  inter-fragment terms are on, and scores 1.000 on its 46. Excluding those two subsets changes
   every headline number and is the first thing a follow-up should do.
 - **These geometries are MD snapshots, not relaxed minima.** SPICE's conformers are
   minimised with only a few L-BFGS steps plus a short 100 K MD run, and the parent
@@ -310,15 +344,16 @@ non-commercial weights permissive after a rewording.
   carries no evidence about proteins, nucleic acids, or ligands.
 - **Pairs cluster by molecule and the intervals do not account for it.** The design
   effect is about 2 (ICC 0.10-0.13), so the ORB and MACE intervals should be about
-  1.4x wider than quoted. No conclusion changes — the model differences are far
+  1.4x wider than quoted. The held-out Wilson intervals are worse off (design
+  effect 3.4–5.2); compound-clustered intervals are given beside that table. No conclusion changes — the model differences are far
   larger than that — but the CIs as printed are optimistic.
 - **A conformer pair is a proxy for a chemical decision.** It is the cheapest
   honest proxy — same molecule, real quantum energies, thousands of examples — but
   it is not a reaction energy, a binding affinity, or a barrier. Do not quote these
   numbers as "reaction prediction accuracy".
 - **Three models is not a model zoo.** No trend line is fitted, no ranking beyond
-  these three is implied, and the "energy error does not predict decisions"
-  headline is a statement about these three, not a law.
+  these three is implied, and anything said here about how energy error relates to
+  decision accuracy is a statement about these three, not a law.
 - **Counts differ per model** because a conformer a model cannot evaluate cannot
   be scored in any pair containing it; each row states its own n. MACE-OFF23
   returned NaN on 319 of 15,232 conformers (2.1%). I originally wrote "almost all
@@ -331,12 +366,15 @@ non-commercial weights permissive after a rewording.
   pairs**. It was trained on the neutral ten-element subset of SPICE and accepts
   no charge argument, so part of its gap to ORB is domain mismatch rather than
   model quality. Scored only on its own training domain (neutral, supported
-  elements, no ion pairs) MACE reads about 0.78.
-- **MACE-OFF23 shows float32 precision loss on these molecules.** Its absolute
-  energies sit near −28,000 eV, where float32 resolution is ~0.045 kcal/mol; 441
-  scored pairs (2.8% of decided ones) have a model gap of *exactly* zero and are
-  counted as wrong. Excluding them moves MACE 0.760 → 0.768, so the headline
-  number is the conservative one.
+  elements, no ion pairs) MACE reads 0.796 on 12,476 pairs — the neutral pairs
+  above, since every conformer with an unsupported element already returned NaN.
+- **MACE-OFF23 runs in float64; an earlier version of this paragraph described a
+  float32 run.** Its absolute energies sit near −28,000 eV, where float32
+  resolution is ~0.045 kcal/mol, and the float32 run had 441 exact-zero gaps. The
+  committed run is float64 (`scripts/run_model.py`): 82 of MACE-OFF23's 15,717
+  decided pairs (0.52%) have a model gap of *exactly* zero — the 74 ion pairs
+  above and 8 DES370K dimers, a cutoff effect rather than precision — and are
+  counted as wrong. Excluding them moves MACE 0.760 → 0.764.
 - **The subset split is mine.** SPICE's `subset` labels are read from the archive,
   but the biomolecular / small-molecule grouping is a choice I made; the headline
   numbers do not depend on it.
@@ -359,7 +397,7 @@ scripts/run_model.py           one model, one subprocess, JSON out
 scripts/run_sweep.py           chunked, resumable, per-model venv dispatch, locked
 scripts/verify_completeness.py recomputes which models cover every conformer
 scripts/score.py               sign agreement, error stats, null control
-scripts/make_figures.py        six figures, every number read from a CSV
+scripts/make_figures.py        seven figures, every number read from a CSV
 tests/                         tests: units, sign convention, null, layout, cache
 ```
 

@@ -8,7 +8,8 @@ puts MACE at 0.773 -- no drop at all.
 Three candidate explanations, each tested here:
 
   H1 PSEUDO-REPLICATION. The 30 MPCONF196 pairs come from only 7 compounds, and
-     26 of them from 3 macrocycles. A binomial test over 30 pairs assumes 30
+     26 of them from 3 linear tripeptides (FGG114, GGF01, GFA01 by formula;
+     an earlier version of this note called them macrocycles). A binomial test over 30 pairs assumes 30
      independent observations; it does not have them. Test: cluster bootstrap
      over compounds.
   H2 MOLECULE SIZE. MPCONF196 is macrocycles and peptides (median 64 atoms);

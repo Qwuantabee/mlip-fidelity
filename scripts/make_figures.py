@@ -504,8 +504,8 @@ def fig_heldout(_df: pd.DataFrame | None = None) -> None:
     # Two SHORT lines. The explanatory clause ("...so its own bar is zero by
     # construction") made line 2 wider than the half-canvas and clipped it at the
     # figure edge; the explanation belongs in the footer, which wraps.
-    ax2.set_title("Contamination effect, difficulty removed\n"
-                  f"(MMFF94 = {offset:+.3f}, the difficulty offset)",
+    ax2.set_title("Shift beyond the MMFF94 control\n"
+                  f"(MMFF94 = {offset:+.3f}, an assumed offset)",
                   fontsize=9.5)
     ax2.set_xlim(min(shifts) - 0.045, max(shifts) + 0.045)
     # Four ticks, not the default eight: at this narrow range the labels ran
@@ -516,11 +516,12 @@ def fig_heldout(_df: pd.DataFrame | None = None) -> None:
 
     _footer(fig, "Left: in-sample SPICE (pairs < 1 kcal/mol) against Folmsbee & "
                  "Hutchison 2021 (DLPNO-CCSD(T), sub-kcal pairs only), with 95% "
-                 f"Wilson intervals. Right: the shift with MMFF94's {offset:+.3f} "
-                 "subtracted, since MMFF94 trained on neither set and therefore "
-                 "measures how much easier this held-out slice is. A near-zero bar "
-                 "means no detectable in-sample inflation, so MMFF94's own bar "
-                 "is zero by construction.")
+                 f"Wilson intervals (they ignore clustering by compound; see "
+                 f"README). Right: the shift with MMFF94's {offset:+.3f} "
+                 "subtracted, assuming MMFF94, which trained on neither set, "
+                 "measures how much easier this held-out slice is for every "
+                 "model. A near-zero bar means no inflation detected, not none; "
+                 "MMFF94's own bar is zero by construction.")
     fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(FIGS / "heldout.png", dpi=160)
     plt.close(fig)
