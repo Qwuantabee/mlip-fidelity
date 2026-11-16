@@ -33,6 +33,8 @@ decisions_<model>_{all,bio}.csv, summary.csv in the --results directory):
      accuracy, Wilson interval, bias, median and p90 absolute error,
      median_err_in_bars, n_beyond_bar and null_real_accuracy recomputed from the
      decision CSV; n_conformers_scored/failed equal the raw n_ok/n_failed;
+     n_pairs_absent_from_raw is 0 and n_pairs_nan_energy equals the manifest
+     pairs in scope minus the CSV rows;
      licence present (MACE-OFF must read academic/ASL); null p-value in [0,1].
 
 WHAT IT CANNOT SEE: whether a raw energy is the energy the named model actually
@@ -312,7 +314,7 @@ def _close(a, b, tol=1e-9) -> bool:
 
 
 def check_summary(results: Path, frames: dict, results_raw: dict,
-                  f: Failures) -> None:
+                  f: Failures, man: dict | None = None) -> None:
     """6: every summary.csv number is recomputed from its decision CSV."""
     spath = results / "summary.csv"
     if not f.check(spath.exists(), f"missing {spath}"):
@@ -349,6 +351,10 @@ def check_summary(results: Path, frames: dict, results_raw: dict,
             "n_beyond_bar": int((ae > DECISION_BAR_KCAL).sum()),
             "null_real_accuracy": acc,
         }
+        if man:
+            n_scope = sum(1 for p in man["pairs"] if scope == "all" or p["is_bio"])
+            want["n_pairs_absent_from_raw"] = 0
+            want["n_pairs_nan_energy"] = n_scope - len(qm)
         raw = results_raw.get(model)
         if raw is not None:
             want["n_conformers_scored"] = raw["n_ok"]
@@ -387,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
     raws = {json.loads(p.read_text()).get("model"): json.loads(p.read_text())
             for p in sorted(results.glob("raw_*.json"))}
     frames = check_decisions(results, man, conf, emaps, f)
-    check_summary(results, frames, raws, f)
+    check_summary(results, frames, raws, f, man)
     return f.report()
 
 

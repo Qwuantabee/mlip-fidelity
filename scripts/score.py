@@ -49,23 +49,28 @@ def score_model(raw_path: Path, manifest: dict, scope: str) -> tuple[list[dict],
     raw = json.loads(raw_path.read_text())
     model = raw["model"]
     emap = energy_map(raw)
+    present = set(raw["ids"])
     rows, qm_list, ml_list = [], [], []
-    absent = 0
+    absent = nan_pairs = 0
     for p in manifest["pairs"]:
         if scope == "bio" and not p["is_bio"]:
             continue
+        # ABSENT means this raw file was produced from a different conformer set
+        # than the manifest; a NaN is a scored-and-failed conformer (e.g. MACE-OFF
+        # on Na/K/Li). They are counted separately: the old single counter mixed
+        # them (274 MACE / 414 MMFF NaN pairs looked like absences) and was never
+        # enforced, so a 12,242-pair manifest scored against the 16,089-pair raw
+        # files printed a believable accuracy on the overlap and exited 0.
+        # main() refuses to write anything if any pair is absent.
+        if p["id_a"] not in present or p["id_b"] not in present:
+            absent += 1
+            continue
         ea, eb = emap.get(p["id_a"]), emap.get(p["id_b"])
         if ea is None or eb is None:
-            # A NaN is a scored-and-failed conformer; ABSENT means this raw file
-            # was produced from a different pair set than the manifest. The two must
-            # not be conflated: an absent id used to be skipped silently, so scoring
-            # a 12,242-pair manifest against 16,089-pair raw files reported a
-            # believable accuracy on the 4,261 pairs that happened to overlap.
-            absent += 1
+            nan_pairs += 1
             continue
         # model gap in eV -> kcal/mol, sign preserved: E(B) - E(A)
         gap_ev = eb - ea
-        gap_kcal = gap_ev * HA2EV / HA2EV * 0.0  # placeholder replaced below
         gap_kcal = (gap_ev / HA2EV) * 627.5094740631
         agree = int(np.sign(gap_kcal) == np.sign(p["qm_gap_kcal"]))
         rows.append({
@@ -88,7 +93,8 @@ def score_model(raw_path: Path, manifest: dict, scope: str) -> tuple[list[dict],
     if len(qm) >= 5:
         stats.update({f"null_{k}": v for k, v in
                       null_control(ml, qm, n_shuffle=200).items()})
-    stats.update({"n_pairs_absent_from_raw": absent, "model": model, "scope": scope,
+    stats.update({"n_pairs_absent_from_raw": absent,
+                  "n_pairs_nan_energy": nan_pairs, "model": model, "scope": scope,
                   "family": raw.get("meta", {}).get("family", "?"),
                   "licence": raw.get("meta", {}).get("licence", "?"),
                   "wall_seconds": raw.get("wall_seconds"),
@@ -131,7 +137,7 @@ def main() -> int:
     if not raw_files:
         raise SystemExit(f"no raw files matched {args.raw_glob}")
 
-    summary = []
+    summary, decisions, absent = [], [], []
     for raw_path in raw_files:
         raw = json.loads(raw_path.read_text())
         if not raw.get("ok"):
@@ -140,14 +146,29 @@ def main() -> int:
             continue
         for scope in ("all", "bio"):
             rows, stats = score_model(raw_path, manifest, scope)
-            if not stats or not stats.get("n_pairs"):
+            if stats.get("n_pairs_absent_from_raw"):
+                absent.append(f"{stats['model']} ({scope}): "
+                              f"{stats['n_pairs_absent_from_raw']} pairs absent "
+                              f"from {raw_path.name}")
+            if not stats.get("n_pairs"):
                 continue
             stem = raw.get("model", "model")
-            with open(out_dir / f"decisions_{stem}_{scope}.csv", "w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-                w.writeheader()
-                w.writerows(rows)
+            decisions.append((out_dir / f"decisions_{stem}_{scope}.csv", rows))
             summary.append(stats)
+
+    # Checked BEFORE anything is written, so a mismatched run leaves no
+    # believable-looking CSV or summary behind for a figure to pick up.
+    if absent:
+        raise SystemExit(
+            f"score.py: manifest {args.manifest} references conformer ids absent "
+            "from the raw files; the manifest and the sweep were built from "
+            "different conformer sets. Refusing to score. " + "; ".join(absent))
+
+    for path, rows in decisions:
+        with open(path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
 
     if summary:
         keys = sorted({k for s in summary for k in s})
@@ -165,7 +186,9 @@ def main() -> int:
               f"acc={s['accuracy']:.3f} "
               f"[{s['accuracy_lo']:.3f},{s['accuracy_hi']:.3f}] "
               f"medErr={s['median_abs_err_kcal']:.3f} kcal  "
-              f"nullP={s.get('null_p_value', float('nan')):.3f}")
+              f"nullP={s.get('null_p_value', float('nan')):.3f}  "
+              f"absent={s['n_pairs_absent_from_raw']} "
+              f"nan_pairs={s['n_pairs_nan_energy']}")
     return 0
 
 
