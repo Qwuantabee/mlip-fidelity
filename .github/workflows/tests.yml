@@ -21,3 +21,8 @@ jobs:
           pip install pytest numpy pandas scipy h5py matplotlib rdkit
       - name: Tests
         run: pytest tests/ -q
+      - name: Artefact correctness checks
+        # Recomputes every committed decision-CSV gap from the raw energies, every
+        # QM gap from conformers.jsonl, and summary.csv from the CSVs; exits 1 on
+        # any disagreement. Scope: see the docstring of scripts/check_artefacts.py.
+        run: python scripts/check_artefacts.py
