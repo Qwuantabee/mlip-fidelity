@@ -148,18 +148,23 @@ def fig_fidelity_vs_error(df: pd.DataFrame) -> None:
     ax.set_ylim(0, 1.02)
     ax.text(ax.get_xlim()[1], chance + 0.02, "chance", fontsize=7.5, ha="right",
             color="#555555")
+    # "In-sample" is in the title, not only in the README: two of the three models
+    # trained on SPICE, and a figure gets copied without its caption.
     ax.set_title(
-        f"Decision accuracy vs gap error ({span} decided pairs per model)\n"
-        f"{headline}", fontsize=9.5)
+        f"In-sample (SPICE): decision accuracy vs gap error\n"
+        f"{span} decided pairs per model; {headline}", fontsize=9.5)
     handles = [Line2D([], [], marker="o", ls="", color="#333333", ms=6,
                       label="decision accuracy; Wilson 95% CI is narrower than "
                             "the marker at these n")]
     ax.legend(handles=handles, loc="lower left", fontsize=7.5, frameon=False)
     ax.grid(alpha=0.25)
-    _footer(fig, "SPICE-1.1.4 QM reference; pairs within 1 kcal/mol. The null "
+    _footer(fig, "SPICE-1.1.4 QM reference; pairs within 1 kcal/mol. ORB-omol and "
+                 "MACE-OFF23 were trained on SPICE, so their points are in-sample; "
+                 "MMFF94 is the only out-of-sample point. The null "
                  "control (shuffled pairing) sits at chance for every model, so "
                  "the accuracy above is not an artefact of the pairing.")
-    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    # The footer wraps to three lines at this width; leave it room below the x label.
+    fig.tight_layout(rect=(0, 0.075, 1, 1))
     fig.savefig(FIGS / "fidelity_vs_error.png", dpi=160)
     plt.close(fig)
 
@@ -424,18 +429,20 @@ def fig_licence_table(df: pd.DataFrame) -> None:
 
 
 def fig_heldout(_df: pd.DataFrame | None = None) -> None:
-    """The held-out test: in-sample vs out-of-sample, and the difficulty offset.
+    """The held-out test: in-sample vs a second dataset, overall and at equal gap.
 
     Takes `_df` only because main() calls every figure builder with the summary
-    frame; this figure reads results/heldout_folmsbee_summary.csv instead, since
-    the in-sample and held-out numbers live in different artefacts.
+    frame; this figure reads results/heldout_folmsbee_summary.csv and the
+    decision CSVs instead, since the in-sample and held-out numbers live in
+    different artefacts.
 
-    This is the figure the repo's central claim needs, and it did not exist until
-    a second held-out benchmark showed the two sets disagree. Left panel: each
-    model's in-sample SPICE accuracy against its accuracy on unseen sub-kcal
-    pairs. Right panel: the same shift with the uncontaminated control (MMFF94,
-    which has trained on neither dataset) subtracted, which is the only way to
-    separate contamination from the held-out slice simply being easier.
+    Left panel: each model's in-sample SPICE accuracy against its accuracy on
+    Folmsbee's sub-kcal pairs. Right panel: accuracy by size of the reference
+    gap on both datasets (the README's gap-size table). The right panel used to
+    plot each model's shift minus MMFF94's, labelled "beyond the uncontaminated
+    control"; that reading was withdrawn because MMFF94's accuracy barely depends
+    on the gap while the ML models' does, and at equal gap every model scores
+    higher on Folmsbee. The gap-size comparison is the evidence for that.
     """
     fb_path = RESULTS / "heldout_folmsbee_summary.csv"
     if not fb_path.exists():
@@ -477,7 +484,7 @@ def fig_heldout(_df: pd.DataFrame | None = None) -> None:
     ax.set_xticklabels([label(m) for m in order], fontsize=8)
     ax.set_ylim(0, 1.02)
     ax.set_ylabel("decision accuracy on sub-kcal pairs")
-    ax.set_title("Same models, same question, unseen molecules\n"
+    ax.set_title("Same models, same question, a dataset outside SPICE\n"
                  f"{int(out['n_under_1kcal'].iloc[0]):,} held-out pairs "
                  f"vs {int(ins['n_decided'].max()):,} in-sample",
                  fontsize=9.5)
@@ -486,42 +493,42 @@ def fig_heldout(_df: pd.DataFrame | None = None) -> None:
               bbox_to_anchor=(0.5, -0.12), ncol=2)
     ax.grid(axis="y", alpha=0.25)
 
-    # Right panel: shift net of the uncontaminated control.
-    control = "rdkit_mmff"
-    offset = (out.loc[control, "acc_under_1kcal"] - ins.loc[control, "accuracy"]
-              if control in order else 0.0)
-    shifts = [(out.loc[m, "acc_under_1kcal"] - ins.loc[m, "accuracy"]) - offset
-              for m in order]
-    cols = ["#2ca02c" if abs(sv) < 0.02 else "#d62728" for sv in shifts]
-    ax2.barh(xs, shifts, 0.55, color=cols, edgecolor="black", linewidth=0.5)
-    for y, sv in zip(xs, shifts):
-        ax2.text(sv + (0.006 if sv >= 0 else -0.006), y, f"{sv:+.3f}",
-                 va="center", ha="left" if sv >= 0 else "right", fontsize=8)
-    ax2.axvline(0, color="black", lw=1)
-    ax2.set_yticks(xs)
-    ax2.set_yticklabels([label(m) for m in order], fontsize=8)
-    ax2.set_xlabel("accuracy change beyond the uncontaminated control")
-    # Two SHORT lines. The explanatory clause ("...so its own bar is zero by
-    # construction") made line 2 wider than the half-canvas and clipped it at the
-    # figure edge; the explanation belongs in the footer, which wraps.
-    ax2.set_title("Shift beyond the MMFF94 control\n"
-                  f"(MMFF94 = {offset:+.3f}, an assumed offset)",
-                  fontsize=9.5)
-    ax2.set_xlim(min(shifts) - 0.045, max(shifts) + 0.045)
-    # Four ticks, not the default eight: at this narrow range the labels ran
-    # together with no gap (a vision pass caught it).
-    ax2.set_xticks(np.linspace(round((min(shifts) - 0.04) * 40) / 40,
-                               round((max(shifts) + 0.04) * 40) / 40, 4))
-    ax2.grid(axis="x", alpha=0.25)
+    # Right panel: accuracy at equal gap size, SPICE (dashed) vs Folmsbee (solid).
+    # Same bins and the same rows as scripts/reconcile_heldout.py block H3: every
+    # row of each decisions CSV, ties included in the first bin.
+    bins = [(0.0, 0.1), (0.1, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1.0)]
+    mids = np.arange(len(bins))
+    for m in order:
+        s = pd.read_csv(RESULTS / f"decisions_{m}_all.csv")
+        f = pd.read_csv(RESULTS / f"heldout_folmsbee_decisions_{m}.csv")
+        sa, fa = s.qm_gap_kcal.abs(), f.ref_kcal.abs()
+        acc_s = [s.agree[(sa >= lo) & (sa < hi)].mean() for lo, hi in bins]
+        acc_f = [f.agree[(fa >= lo) & (fa < hi)].mean() for lo, hi in bins]
+        ax2.plot(mids, acc_s, ls="--", marker="o", mfc="white", color=colour(m), lw=1.3)
+        ax2.plot(mids, acc_f, ls="-", marker="o", color=colour(m), lw=1.6,
+                 label=label(m))
+    ax2.set_xticks(mids)
+    ax2.set_xticklabels([f"{lo:g}–{hi:g}" for lo, hi in bins], fontsize=8)
+    ax2.set_xlabel("reference gap (kcal/mol)")
+    ax2.set_ylim(0.45, 1.0)
+    ax2.set_yticks([0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+    ax2.axhline(0.5, ls="--", lw=1, color="#777777")
+    ax2.set_title("At equal gap size, every model scores higher\n"
+                  "on Folmsbee (solid) than on SPICE (dashed)", fontsize=9.5)
+    handles = [Line2D([], [], color=colour(m), lw=1.6, label=label(m)) for m in order]
+    handles += [Line2D([], [], color="#333333", ls="--", marker="o", mfc="white",
+                       label="SPICE (in-sample)"),
+                Line2D([], [], color="#333333", ls="-", marker="o", label="Folmsbee")]
+    ax2.legend(handles=handles, fontsize=7, frameon=False, loc="upper left")
+    ax2.grid(alpha=0.25)
 
-    _footer(fig, "Left: in-sample SPICE (pairs < 1 kcal/mol) against Folmsbee & "
-                 "Hutchison 2021 (DLPNO-CCSD(T), sub-kcal pairs only), with 95% "
-                 f"Wilson intervals (they ignore clustering by compound; see "
-                 f"README). Right: the shift with MMFF94's {offset:+.3f} "
-                 "subtracted, assuming MMFF94, which trained on neither set, "
-                 "measures how much easier this held-out slice is for every "
-                 "model. A near-zero bar means no inflation detected, not none; "
-                 "MMFF94's own bar is zero by construction.")
+    _footer(fig, "Left: in-sample SPICE (pairs < 1 kcal/mol, ties excluded) against "
+                 "Folmsbee & Hutchison 2021 (DLPNO-CCSD(T), every sub-kcal pair), "
+                 "with 95% Wilson intervals (they ignore clustering by compound; see "
+                 "README). ORB-omol's lower overall Folmsbee figure is composition: "
+                 "Folmsbee has far more pairs under 0.1 kcal/mol. Right: accuracy by "
+                 "reference-gap bin, ties in the first bin. Molecule-level overlap "
+                 "between Folmsbee and the models' training sets was not checked.")
     fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(FIGS / "heldout.png", dpi=160)
     plt.close(fig)

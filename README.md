@@ -148,9 +148,9 @@ inflation from contamination is demonstrated for either ML model.
 
 ![In-sample vs held out](figures/heldout.png)
 
-*Left: accuracy on each dataset. Right: each model's shift minus MMFF94's. The
-right panel is an estimate under an assumption that does not hold (see "Accuracy
-at equal gap size"); it is not a measured contamination effect.*
+*Left: accuracy on each dataset. Right: accuracy by size of the reference gap,
+SPICE dashed and Folmsbee solid (the gap-size table below). An earlier version
+of the right panel plotted the withdrawn "shift beyond MMFF94" bars.*
 
 | model | SPICE (in-sample) | **Folmsbee held out** | shift | shift minus MMFF94's | Folmsbee, ties excluded (decided pairs) |
 |---|---|---|---|---|---|
