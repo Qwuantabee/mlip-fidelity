@@ -9,6 +9,21 @@ the values at the time of each defect, not current results.
 This section exists because a repo that only shows its successes teaches the
 reader nothing about how far to trust it.
 
+## Summary
+
+The table that was in the README; each row is detailed below.
+
+| defect | effect on the published number |
+|---|---|
+| SPICE coordinates are Bohr, were read as Ångström | MACE-OFF23 scored at chance, 0.489; 0.723 once converted |
+| ORB-omol row scored from a 1,500-conformer artefact | 0.893 withdrawn; full re-run gives 0.900 on 15,991 pairs |
+| Chunk cache keyed by index, not by slice | merged artefacts had 1,200 duplicated and 6,232 missing conformers |
+| Failure counts summed from truncated lists | a run with 319 failed conformers reported 70 |
+| MMFF94 energies stored as eV, are kcal/mol | MMFF94 error inflated 23x; an "error does not predict accuracy" headline was refuted and removed |
+| Completeness gate was a hand-edited file | now recomputed from raw artefacts; scoring refuses partial sweeps |
+
+## The six defects
+
 **1. A unit bug that made the first result meaningless.** The first full sweep said
 MACE ranked sub-kcal pairs at chance: accuracy 0.489, null p = 0.58. The pipeline
 was wrong, not the model — **SPICE stores conformations in Bohr**, and they were
