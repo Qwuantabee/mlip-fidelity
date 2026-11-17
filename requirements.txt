@@ -1,6 +1,6 @@
 # Pinned to the versions the committed artefacts were produced with.
-# These are the versions in results/SUMMARY.md provenance; a different numpy or
-# pandas can change groupby ordering and therefore figure layout.
+# A different numpy or pandas can change groupby ordering and therefore figure
+# layout.
 numpy==2.4.2
 pandas==3.0.1
 scipy==1.18.0

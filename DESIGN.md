@@ -3,6 +3,23 @@
 **Repo:** `mlip-fidelity` — working title *Do machine-learned interatomic potentials
 preserve chemical decisions?*
 
+> **Status: the plan as written before any measurement.** It is kept so the plan
+> can be compared with what was done; the README is the record of the result.
+> What shipped differs from this document in four ways:
+>
+> 1. Three models were scored (ORB-omol v1, MACE-OFF23 small, MMFF94), not the
+>    zoo listed below.
+> 2. The headline plots accuracy against each model's own measured pair-gap
+>    error, not against a published energy MAE; figures (b), (e) and (f) below
+>    were not made as described.
+> 3. Two framing claims below turned out wrong and are corrected in the README:
+>    the 1 kcal/mol bar is *not* far above a ~1 meV/atom MAE (at 36 atoms it is
+>    1.2 meV/atom), and conformer-ranking benchmarks already exist (Folmsbee,
+>    MPCONF196, TorsionNet206), so "nobody has measured this" is not true.
+> 4. This document does not mention train/test contamination. Two of the three
+>    models were trained on SPICE; that was found after the first results and is
+>    the main caveat on them.
+
 ## The question nobody in the 2026 uMLIP wave is answering
 
 Every 2026 benchmark of universal machine-learned interatomic potentials (uMLIPs)
@@ -27,14 +44,11 @@ a number no one has published, and it is exactly what a computational chemistry
 or protein-engineering team would want to know before trusting a foundation
 potential in a design loop.
 
-## Why this is the right fifth project
+## Why this question
 
-The four existing repos cover variant effects (ProteinGym/ESM-2), single-cell DE,
-enzyme kinetics, and FEP/Boltz-2 affinity. This one is **physics, not sequence**:
-it is about whether the simulation engine itself is trustworthy. It is also the
-only one that uses the GPU as a first-class instrument (thousands of
-single-point evaluations across a model zoo), rather than as a place to park an
-embedding model.
+It is **physics, not sequence**: it is about whether the simulation engine itself
+is trustworthy, and it needs thousands of GPU single-point evaluations across
+several models.
 
 ## The core measurement
 
@@ -56,7 +70,7 @@ headline figure and the thing that makes the repo quotable.
 
 ## Where the data comes from
 
-Use SPICE (16 GB, Zenodo 8222043, already downloaded: ~1M conformers with
+Use SPICE (16 GB, Zenodo 8222043: ~1M conformers with
 ωB97M-D3(BJ)/def2-TZVPPD energies and forces across drug-like molecules, peptides,
 solvated amino acids, and protein fragments). It is the community standard for
 training and evaluating MLIPs on biomolecular chemistry, and unlike most
@@ -73,9 +87,9 @@ manifest) by grouping conformers of the same molecule and taking pairs whose
 QM energy differs by less than a threshold, plus a matched control set of pairs
 that differ a lot. Nothing is hand-picked; the grouping rule is the method.
 
-## The model zoo (all GPU, all pip-installable — verified)
+## The model zoo (planned; see Status for what ran)
 
-- MACE-OFF23 (small/medium) — verified running on this GPU in 3 s
+- MACE-OFF23 (small/medium)
 - MACE-MP-0 (materials-trained, as a domain-transfer contrast)
 - ORB-v2 / ORB-v3 — `orb-models`
 - eSEN / UMA via `fairchem-core`
@@ -132,7 +146,7 @@ is recorded in the results.
   is still a result; a 7-model one is better.
 - **Some models are licence-restricted** (MACE-OFF is academic-only). Mitigation:
   record the licence per model in the results and README; never imply commercial
-  usability of a model that forbids it. This matters for a hiring audience.
+  usability of a model that forbids it.
 - **The finding may be "everything is fine".** That is a publishable, honest
   result too, and the null control plus intervals make the claim defensible
   either way. Do not manufacture a gap.

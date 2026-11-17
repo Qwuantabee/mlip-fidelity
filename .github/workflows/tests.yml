@@ -18,7 +18,9 @@ jobs:
           # SMILES charge parsing, and tests/test_pipeline_e2e.py checks that its
           # kcal/mol energies reach the scorer in the right unit. Leaving it out
           # skipped that check in CI, which is how the 23x unit bug shipped.
-          pip install pytest numpy pandas scipy h5py matplotlib rdkit
+          # Pinned: the README numbers are asserted against artefacts made with
+          # these versions, so CI installs the same ones.
+          pip install -r requirements.txt pytest
       - name: Tests
         run: pytest tests/ -q
       - name: Artefact correctness checks
