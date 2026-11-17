@@ -1,5 +1,9 @@
 # Do machine-learned potentials preserve the chemical decisions?
 
+[![tests](https://github.com/Qwuantabee/mlip-fidelity/actions/workflows/tests.yml/badge.svg)](https://github.com/Qwuantabee/mlip-fidelity/actions/workflows/tests.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Qwuantabee/mlip-fidelity/blob/master/LICENSE)
+[![python](https://img.shields.io/badge/python-3.12-blue.svg)](https://github.com/Qwuantabee/mlip-fidelity/blob/master/pyproject.toml)
+
 **On sub-kcal/mol conformer pairs, sign accuracy is a steep and predictable function of pair-gap error: a median error of 0.15 kcal/mol gets 90% of orderings right, 0.45 gets 76%, and 1.61 gets 60%. Error does predict the decision — but only if you compare it to the gap you are trying to resolve, not to a leaderboard MAE.**
 
 ![Decision accuracy vs gap error](figures/fidelity_vs_error.png)
