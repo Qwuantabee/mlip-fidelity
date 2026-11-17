@@ -355,6 +355,32 @@ installing `fairchem-core` upgrades `e3nn` to 0.6, which silently breaks MACE
 checkpoint loading (`ValueError: too many values to unpack`) *at evaluation time*,
 not at import. A shared environment produces wrong numbers, quietly.
 
+**The held-out half** needs two small public repositories (no download over a
+few MB) and the same model venvs:
+
+```bash
+git clone https://github.com/ghutchis/conformer-benchmark _data/folmsbee     # Folmsbee & Hutchison 2021, MIT; built at commit 0109c8e
+git clone https://github.com/grimme-lab/benchmark-MPCONF196 _data/mpconf196  # Řezáč 2018, references revised 2023; built at commit e1d030d
+python scripts/build_heldout_folmsbee.py     # -> results/heldout_folmsbee.json (22,379 pairs)
+python scripts/build_heldout.py              # -> results/heldout_mpconf196.json
+python scripts/score_heldout.py --bench results/heldout_folmsbee.json --tag heldout_folmsbee   # GPU
+python scripts/score_heldout.py              # MPCONF196, GPU
+python scripts/orb_repeatability.py --publish   # GPU, a few minutes
+python scripts/reconcile_heldout.py          # clustered intervals, accuracy by gap size
+python scripts/intervals.py                  # every bootstrap interval in this README
+```
+
+Without a GPU, `score_heldout.py ... --tag heldout_folmsbee --from-raw` followed by
+`orb_repeatability.py --from-saved --publish` re-derives every Folmsbee artefact
+from the committed energies; both builders and that pair of commands reproduce
+the committed files byte for byte.
+
+**Expected runtime:** the 16 GB SPICE download dominates (hours on one
+connection). The three SPICE model runs took 433 s (ORB-omol), 319 s (MACE-OFF23)
+and 18 s (MMFF94) on one GPU (`wall_seconds` in `results/raw_*.json`). The
+held-out builders take about 15 s, every no-GPU recompute under 20 s, and
+`pytest` about 20 s.
+
 ## What went wrong on the way (kept on purpose)
 
 Six defects changed or withdrew a published number or broke a guard on one.
@@ -371,89 +397,32 @@ Regression tests for them are in `tests/`. Full account: [`docs/DEFECT_TRAIL.md`
 
 ## Limits, stated plainly
 
-- **SPICE is ωB97M-D3(BJ), not CCSD(T).** At sub-kcal gaps the reference itself carries
-  error; a "wrong" decision within ~0.2 kcal/mol should be read as
-  indistinguishable from reference noise, not as a model failure. ORB-omol's
-  training labels (OMol25) are ωB97M-V/def2-TZVPD, a neighbouring but different
-  level of theory, so part of its residual is method difference rather than
-  model error.
-- **Two of the three rows are train/test contaminated, and I only found out after
-  publishing.** This is the single biggest caveat in the table and a reviewer had
-  to point it out:
-  - **MACE-OFF23** is trained on ~95% of SPICE v1 (MACE-OFF paper, arXiv 2312.15211,
-    Sec. II.2), so scoring it on SPICE 1.1.4 is mostly an **in-sample** evaluation.
-    Its 0.760 is an in-sample number that is still only 0.760.
-  - **ORB-omol** is trained on OMol25, whose community domain documents SPICE2 — a
-    superset of SPICE 1.x. So it is also very likely in-sample at the molecule
-    level; geometry-level overlap I cannot verify.
-  - **MMFF94** is the only clean out-of-sample row.
-  - Read the ML accuracies as *fidelity to their own training data*, not as
-    generalisation. The held-out test above (Folmsbee, with MPCONF196 as a small
-    check) shows the ranking survives outside SPICE; it does not measure how
-    large the in-sample inflation is, because it has no valid difficulty
-    control. TorsionNet206 has not been run.
-- **Not every pair is a conformer pair, and the wording above overstates it.**
-  3,149 of 16,089 pairs (19.6%) come from multi-component systems: the DES370K
-  subset is hydrogen-bonded **dimers** (`C=C.[Na+]`), so those pairs are
-  intermolecular geometry changes, and the 21 ion-pair molecules are diatomics
-  scanned over 2.5-7.4 Å. The ion-pair row is a mechanical failure, not a chemistry
-  failure — the two ML models return exact-zero gaps there (ORB on 121 of its 143
-  decided ion-pair pairs, MACE-OFF23 on all 74 of its), consistent with a graph
-  cutoff, and ORB scores 0.126 there. MMFF94 has no cutoff now that its
-  inter-fragment terms are on, and scores 1.000 on its 46. Excluding those two subsets changes
-  every headline number and is the first thing a follow-up should do.
-- **These geometries are MD snapshots, not relaxed minima.** SPICE's conformers are
-  minimised with only a few L-BFGS steps plus a short 100 K MD run, and the parent
-  sets include 300/500 K MD frames. An electronic ΔE between two such snapshots is
-  not the ΔG a chemist means by "the preferred conformer". Ranking snapshots is a
-  stricter test of a potential than ranking minima; it is not the same test.
-- **The "biomolecular" slice is 99.6% dipeptides** (6,579 of 6,607 pairs), with 28
-  from solvated amino acids. "Bio is harder" is really "dipeptides are harder"; it
-  carries no evidence about proteins, nucleic acids, or ligands.
+Each limit below is set out with its measurement in [`docs/LIMITS.md`](docs/LIMITS.md).
+
+- **Two of the three rows are in-sample.** MACE-OFF23 trained on ~95% of SPICE v1
+  and ORB-omol's OMol25 includes SPICE2; MMFF94 is the only clean out-of-sample
+  row. The held-out test shows the ranking survives outside SPICE; it does not
+  measure how large the in-sample inflation is.
+- **The reference is DFT (ωB97M-D3(BJ)), not CCSD(T).** A wrong decision within
+  ~0.2 kcal/mol is indistinguishable from reference noise.
+- **Not every pair is a conformer pair:** 3,149 of 16,089 pairs (19.6%) come from
+  DES370K dimers and 21 ion-pair diatomics. On the ion pairs both ML models return exact-zero gaps, a cutoff
+  effect, and ORB scores 0.126.
+- **The geometries are MD snapshots, not relaxed minima**, and the "biomolecular"
+  slice is 99.6% dipeptides.
 - **Pairs cluster by molecule and the intervals do not account for it.** The design
   effect is about 2 (ICC about 0.10), so the ORB and MACE intervals should be about
   1.4x wider than quoted (`scripts/intervals.py`). The held-out Wilson intervals are worse off (design
   effect 3.5–5.4); compound-clustered intervals are given beside that table. No conclusion changes — the model differences are far
   larger than that — but the CIs as printed are optimistic.
-- **A conformer pair is a proxy for a chemical decision.** It is the cheapest
-  honest proxy — same molecule, real quantum energies, thousands of examples — but
-  it is not a reaction energy, a binding affinity, or a barrier. Do not quote these
-  numbers as "reaction prediction accuracy".
-- **Three models is not a model zoo.** No trend line is fitted, no ranking beyond
-  these three is implied, and anything said here about how energy error relates to
-  decision accuracy is a statement about these three, not a law.
-- **Counts differ per model** because a conformer a model cannot evaluate cannot
-  be scored in any pair containing it; each row states its own n. MACE-OFF23
-  returned NaN on 319 of 15,232 conformers (2.1%). I originally wrote "almost all
-  charged or radical species"; that was wrong. Checked: **every one of the 319
-  contains an element MACE-OFF23 does not support** (Li 43, Na 135, K 154, Mg 3,
-  Ca 20), and none is merely charged.
-- **MACE-OFF23 has no charge input, yet 20.6% of the pairs it is scored on are
-  charged species.** Measured: 3,241 of its 15,717 decided pairs involve a
-  charged conformer, and it scores **0.623 there against 0.796 on neutral
-  pairs**. It was trained on the neutral ten-element subset of SPICE and accepts
-  no charge argument, so part of its gap to ORB is domain mismatch rather than
-  model quality. Scored only on its own training domain (neutral, supported
-  elements, no ion pairs) MACE reads 0.796 on 12,476 pairs — the neutral pairs
-  above, since every conformer with an unsupported element already returned NaN.
-- **MACE-OFF23 runs in float64; an earlier version of this paragraph described a
-  float32 run.** Its absolute energies sit near −28,000 eV, where float32
-  resolution is ~0.045 kcal/mol, and the float32 run had 441 exact-zero gaps. The
-  committed run is float64 (`scripts/run_model.py`): 82 of MACE-OFF23's 15,717
-  decided pairs (0.52%) have a model gap of *exactly* zero — the 74 ion pairs
-  above and 8 DES370K dimers, a cutoff effect rather than precision — and are
-  counted as wrong. Excluding them moves MACE 0.760 → 0.764.
-- **The subset split is mine.** SPICE's `subset` labels are read from the archive,
-  but the biomolecular / small-molecule grouping is a choice I made; the headline
-  numbers do not depend on it.
-- **MMFF94 is not a fair fight on energy.** It is the classical reference point,
-  and its huge error is why the accuracy axis matters — not a claim that a force
-  field is competitive.
-- **No commercial claim.** MACE-OFF23's **weights are non-commercial only** (an
-  Academic Software Licence) even though its code is MIT; ORB-omol's package
-  metadata declares Apache-2.0; RDKit/MMFF94 is BSD. Per-model terms are in every
-  result artefact and on [`figures/licence_table.png`](figures/licence_table.png).
-  Nothing here implies commercial use of an ASL model.
+- **MACE-OFF23 has no charge input**: 3,241 of its 15,717 decided pairs involve a
+  charged conformer, and it scores **0.623 there against 0.796 on neutral pairs**.
+  Scored only on its own training domain it reads 0.796 on 12,476 pairs. It
+  returns NaN on 319 conformers whose elements it does not support.
+- **A conformer pair is a proxy for a chemical decision**, not a reaction energy,
+  a binding affinity or a barrier; three models are not a model zoo.
+- **No commercial claim.** MACE-OFF23's weights are non-commercial (Academic
+  Software Licence); see [`NOTICE`](NOTICE).
 
 ## Layout
 
@@ -468,11 +437,13 @@ scripts/score.py               sign agreement, error stats, null control
 scripts/make_figures.py        seven figures, every number read from a CSV
 scripts/reconcile_heldout.py   held-out checks: clustered intervals, accuracy by gap size
 docs/DEFECT_TRAIL.md           the wrong numbers found on the way, and their fixes
+docs/LIMITS.md                 every limit, with its measurement
 tests/                         tests: units, sign convention, null, layout, cache
 ```
 
 MIT licence for this repository's own code. The models and data keep their own
-terms — see the licence column and the figure above.
+terms: see [`NOTICE`](NOTICE) for each model and dataset, and the licence figure
+above.
 
 ## References
 
@@ -491,3 +462,17 @@ terms — see the licence column and the figure above.
   TorsionNet206) exist for the molecular case. **This repo's contribution is not the
   framing; it is the measurement on SPICE conformer pairs, and the disclosure that
   two of its three models are trained on the test data.**
+
+## Part of a set
+
+Six repos, one method: take the number a field reports, measure what a practitioner uses, publish
+the gap.
+
+- [admet-split-truth](https://github.com/Qwuantabee/admet-split-truth): does a validation split predict error on the next compounds?
+- mlip-fidelity: do ML potentials rank near-degenerate conformers correctly?
+- [epistasis-ceiling](https://github.com/Qwuantabee/epistasis-ceiling): do single-mutant effects add up on a double mutant?
+- [variant-effect-prediction](https://github.com/Qwuantabee/variant-effect-prediction): does a cleaner assay target help zero-shot ESM-2?
+- [single-cell-de](https://github.com/Qwuantabee/single-cell-de): are cells replicates?
+- [enzyme-kinetics](https://github.com/Qwuantabee/enzyme-kinetics): how wrong is a Lineweaver-Burk Km?
+
+Overview: https://github.com/Qwuantabee

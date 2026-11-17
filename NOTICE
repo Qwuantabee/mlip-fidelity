@@ -13,5 +13,15 @@ and they are NOT interchangeable:
 * SPICE reference data - CC0 1.0 public-domain dedication by the SPICE authors
   (Eastman et al., Sci. Data 10, 11 (2023), doi:10.1038/s41597-022-01882-6).
   Cite the dataset if you reuse the derived pair sets here.
+* Folmsbee & Hutchison held-out set - geometries and DLPNO-CCSD(T) energies from
+  https://github.com/ghutchis/conformer-benchmark (MIT licence, Copyright (c) 2020
+  Geoff Hutchison; https://github.com/ghutchis/conformer-benchmark/blob/master/LICENSE,
+  checked 2026-11-17). results/heldout_folmsbee*.json carry derived pairs, energies
+  and geometries. Cite Folmsbee & Hutchison, Int. J. Quantum Chem. 121, e26381 (2021).
+* MPCONF196 held-out set - from https://github.com/grimme-lab/benchmark-MPCONF196.
+  That repository states no licence (GitHub reports none, checked 2026-11-17), so
+  no reuse terms are granted here for results/heldout_mpconf196.json beyond what
+  the original authors allow. Cite Rezac et al., J. Chem. Theory Comput. 14, 1254
+  (2018), doi:10.1021/acs.jctc.7b01074.
 
 An earlier version of this file said ORB was "ASL 3.0"; that was wrong.
