@@ -53,6 +53,12 @@ def readme() -> str:
 
 
 @pytest.fixture(scope="module")
+def heldout_doc() -> str:
+    """The held-out detail moved out of the README (docs/HELDOUT.md)."""
+    return " ".join((ROOT / "docs" / "HELDOUT.md").read_text().split())
+
+
+@pytest.fixture(scope="module")
 def spice() -> dict[str, pd.DataFrame]:
     out = {}
     for k, m in MODELS.items():
@@ -237,7 +243,7 @@ def _gap_matched(s: pd.DataFrame, f: pd.DataFrame) -> float:
     return total / n_binned
 
 
-def test_gap_reweighted_folmsbee_accuracy(readme, spice, folmsbee):
+def test_gap_reweighted_folmsbee_accuracy(readme, heldout_doc, spice, folmsbee):
     matched = {k: _gap_matched(spice[k], folmsbee[k]) for k in MODELS}
     delta = {k: matched[k] - _decided(spice[k]).ok.mean() for k in MODELS}
     assert (f"ORB-omol {matched['orb']:.3f}, MACE-OFF23 {matched['mace']:.3f} and "
@@ -245,8 +251,9 @@ def test_gap_reweighted_folmsbee_accuracy(readme, spice, folmsbee):
     assert " / ".join(_signed(delta[k]) for k in MODELS) in readme
     rel_orb = delta["orb"] - delta["mmff"]
     rel_mace = delta["mace"] - delta["mmff"]
-    assert f"→ {_signed(rel_orb)}, MACE-OFF23" in readme
-    assert f"→ {_signed(rel_mace)}, each relative" in readme
+    # the MMFF94-offset paragraph that prints these moved to docs/HELDOUT.md
+    assert f"→ {_signed(rel_orb)}, MACE-OFF23" in heldout_doc
+    assert f"→ {_signed(rel_mace)}, each relative" in heldout_doc
     margin = matched["orb"] - matched["mmff"]
     assert f"the Folmsbee margin is {100 * margin:.0f} points" in readme
 

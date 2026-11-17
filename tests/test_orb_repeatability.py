@@ -27,6 +27,7 @@ ART = ROOT / "results" / "orb_repeatability.json"
 SUMMARY = ROOT / "results" / "heldout_folmsbee_summary.json"
 BENCH = ROOT / "results" / "heldout_folmsbee.json"
 README = ROOT / "README.md"
+HELDOUT_DOC = ROOT / "docs" / "HELDOUT.md"   # the held-out detail moved out of the README
 ORB, MACE, MMFF = "orb_orbmol_v1_conservative", "mace_off_small", "rdkit_mmff"
 KCAL_PER_EV = 627.5094740631 / 27.211386245988
 
@@ -218,9 +219,10 @@ def test_the_summary_carries_the_measured_block(art):
 
 
 def _heldout_section() -> str:
-    text = README.read_text()
-    sec = text.split("## The held-out test", 1)[1].split("\n## ", 1)[0]
-    return " ".join(sec.split())          # line wraps are presentation
+    # The charge correction and run-to-run noise paragraphs moved verbatim from
+    # the README's held-out section to docs/HELDOUT.md, which holds nothing but
+    # held-out detail, so the whole file is the section.
+    return " ".join(HELDOUT_DOC.read_text().split())   # line wraps are presentation
 
 
 def _quoted(art) -> list[str]:
