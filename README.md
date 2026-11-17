@@ -122,13 +122,28 @@ slice where they overlap with SPICE: reference gaps under 1 kcal/mol.
 as neutral singlets: the builder hard-coded charge 0 although the dataset lists
 each ion's charge in `geometries/CHG-charges.txt`. With the true charges ORB-omol,
 which takes the charge as input, goes from 0.668 to 0.794 on those compounds'
-1,887 decided pairs and from 0.823 to 0.833 overall; MMFF94 can now perceive
+1,887 decided pairs and from 0.823 to 0.833 overall, a step that includes the
+run-to-run noise measured below; MMFF94 can now perceive
 bonds for most of the ions and scores 21,930 pairs instead of 20,169 (0.625 →
 0.622); MACE-OFF23 takes no charge input and is unchanged. No compound had to be
-excluded for want of a charge. ORB's energies are not bit-reproducible on the
-GPU: re-running the unchanged neutral compounds moved 187 of their 20,436 pair
-decisions (largest gap change 0.04 kcal/mol), which is why the overall figure is
-0.833 rather than the 0.834 a charged-only re-run predicted.
+excluded for want of a charge.
+
+**Run-to-run noise, measured** (`scripts/orb_repeatability.py` →
+`results/orb_repeatability.json`). ML potential energies are not
+bit-reproducible on the GPU. Re-running each model three times
+on the same 607 conformers (63 seeded-random compounds, 2,217 pairs), in fresh
+processes with a byte-identical input, moved all 607 of ORB-omol's energies
+(largest |ΔE| 0.021 kcal/mol, median 0.0035), flipped up to 16 decisions between
+two runs (0.72%) and spread its sample accuracy over 0.836–0.839 (0.0036).
+MACE-OFF23 moved 41 energies by at most 1.7e-09 kcal/mol and flipped none;
+MMFF94, the CPU control, was bit-identical, so the noise is the models', not the
+harness's. On the full set the two committed ORB-omol runs saw identical neutral
+inputs and disagree on 187 of those 20,436 decisions (0.92%; largest gap change
+0.040 kcal/mol): a net 27 decisions, 0.0012 of the 22,379-pair accuracy, which is
+why a predicted 0.834 came out 0.833. **So ORB-omol's 0.833 carries an error bar
+of about ±0.0012.** The 0.823 → 0.833 step (+0.0095, 7.9× that) survives it: it
+is +0.0107 from the charged pairs, whose inputs changed (a net 240 decisions,
+where noise could move at most 19), less 0.0012 of noise on the neutral ones.
 
 The intervals in the table are Wilson intervals, which treat the ~32 pairs per
 compound as independent. They are not: resampling whole compounds (cluster
