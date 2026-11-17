@@ -47,7 +47,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = Path("/home/ubuntu/biotech-portfolio/_data/folmsbee")
+DATA = ROOT / "_data" / "folmsbee"   # gitignored; pass --root to point elsewhere
 
 
 def read_mol(path: Path) -> tuple[list[int], list[list[float]]]:

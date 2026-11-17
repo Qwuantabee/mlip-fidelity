@@ -75,7 +75,8 @@ def read_coord(path: Path) -> tuple[list[int], list[list[float]]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default="/home/ubuntu/biotech-portfolio/_data/mpconf196")
+    ap.add_argument("--root", default=str(Path(__file__).resolve().parent.parent
+                                          / "_data" / "mpconf196"))
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent.parent
                                          / "results" / "heldout_mpconf196.json"))
     args = ap.parse_args()
