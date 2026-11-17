@@ -20,6 +20,8 @@ preserve chemical decisions?*
 >    models were trained on SPICE; that was found after the first results and is
 >    the main caveat on them.
 
+**Environment:** `scripts/loop_step.py` reads `MLIP_DATA` (directory holding the SPICE archive, default `data/_external` under the repo) and `MLIP_PYTHON` (interpreter for the commands it prints, default the one running it).
+
 ## The question nobody in the 2026 uMLIP wave is answering
 
 Every 2026 benchmark of universal machine-learned interatomic potentials (uMLIPs)

@@ -14,3 +14,4 @@ results/_heldout_folmsbee_job.json
 results/**/_job*.json
 results/**/chunk_*.json
 results/quarantine_badchunks/
+data/_external/

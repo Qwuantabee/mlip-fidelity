@@ -14,6 +14,7 @@ Exit code 0 always; the JSON on stdout is the state the turn should act on.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -21,9 +22,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "LOOP_STATE.json"
-DATA = Path("/home/ubuntu/biotech-portfolio/_data")
+# Where the SPICE archive and its fetch script live, and which interpreter the
+# printed commands use. Both come from the environment so no machine path is
+# baked in: MLIP_DATA (default data/_external under the repo) and MLIP_PYTHON
+# (default: the interpreter running this script).
+DATA = Path(os.environ.get("MLIP_DATA") or ROOT / "data" / "_external")
 SPICE = DATA / "SPICE-1.1.4.hdf5"
-PY = "/home/ubuntu/.openclaw/workspace/venv/bin/python"
+PY = os.environ.get("MLIP_PYTHON") or sys.executable
 
 
 def now() -> str:
@@ -168,14 +173,14 @@ def main() -> int:
         out["next"] = ("wait for the unit; it re-arms itself. If it died, restart "
                        "with: systemctl --user reset-failed spice-par && "
                        "systemd-run --user --collect --unit spice-par "
-                       "--working-directory=/home/ubuntu/biotech-portfolio/_data "
-                       "/home/ubuntu/biotech-portfolio/_data/fetch_par.sh")
+                       f"--working-directory={DATA} "
+                       f"{DATA}/fetch_par.sh")
     elif name == "INVENTORY":
         out["next"] = (f"{PY} scripts/spice_inventory.py "
-                       "--archive /home/ubuntu/biotech-portfolio/_data/SPICE-1.1.4.hdf5")
+                       f"--archive {SPICE}")
     elif name == "PAIRS":
         out["next"] = (f"{PY} scripts/build_pairs.py "
-                       "--archive /home/ubuntu/biotech-portfolio/_data/SPICE-1.1.4.hdf5")
+                       f"--archive {SPICE}")
     elif name == "SWEEP":
         live = running_sweeps()
         out["sweeps_active"] = live
