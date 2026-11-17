@@ -88,7 +88,7 @@ Four things worth taking from that table.
    gives accuracy 0.900 / 0.760 / 0.601. Pairwise differences are robust to
    clustering by molecule — on the 15,578 pairs all three models scored, with a
    bootstrap over their 1,530 molecules, ORB−MACE +0.144 [0.135, 0.152] and
-   MACE−MMFF +0.161 [0.150, 0.171] — so this is not a tie. **I do not fit a trend line:** three
+   MACE−MMFF +0.160 [0.150, 0.171] (`scripts/intervals.py`) — so this is not a tie. **I do not fit a trend line:** three
    points cannot distinguish a curve from a coincidence, and an earlier draft of
    this README claimed the two were independent, which the corrected units
    refuted.
@@ -196,8 +196,8 @@ where noise could move at most 19), less 0.0012 of noise on the neutral ones.
 
 The intervals in the table are Wilson intervals, which treat the ~32 pairs per
 compound as independent. They are not: resampling whole compounds (cluster
-bootstrap, 4,000 draws) widens them to ORB [0.823, 0.841], MACE [0.761, 0.784]
-and MMFF94 [0.607, 0.637], a design effect of 3.4–5.2. The Folmsbee column also
+bootstrap, 10,000 draws, `scripts/intervals.py`) widens them to ORB [0.823, 0.842], MACE [0.762, 0.784]
+and MMFF94 [0.607, 0.637], a design effect of 3.5–5.4. The Folmsbee column also
 counts every sub-kcal pair, including 567 near-ties (|gap| ≤ 0.01 kcal/mol; 553
 for MMFF94) that the SPICE column excludes; with ties excluded the held-out
 figures are 0.840 / 0.780 / 0.624.
@@ -234,7 +234,8 @@ MMFF94 has never seen either dataset, so one can take its +0.021 as an estimate
 of how much easier the held-out slice is, and subtract it from each ML model's
 raw shift. That treats slice difficulty as the same for every model, which the
 gap-size table shows is false. Intervals resample SPICE molecules and Folmsbee
-compounds independently (4,000 draws).
+compounds independently of each other, one draw shared by all three models
+(10,000 draws, `scripts/intervals.py`).
 
 - **ORB-omol: −0.089** (95% CI −0.107 to −0.070) on that estimate. An earlier
   version of this README read it as "ORB-omol loses about 9 points beyond
@@ -242,7 +243,7 @@ compounds independently (4,000 draws).
   the interval covers sampling error only, and the sign of the effect reverses
   once gap size is matched (+0.024 on its own, −0.038 relative to MMFF94's
   gap-matched +0.062). The data are consistent with some inflation and with none.
-- **MACE-OFF23: −0.008** (95% CI −0.027 to +0.012); gap-matched it is +0.091.
+- **MACE-OFF23: −0.008** (95% CI −0.028 to +0.012); gap-matched it is +0.091.
   No inflation detected, which is absence of evidence, not evidence of absence.
 
 The offset is the weak link for both models, for the same reasons: Folmsbee's
@@ -410,9 +411,9 @@ Regression tests for them are in `tests/`. Full account: [`docs/DEFECT_TRAIL.md`
   from solvated amino acids. "Bio is harder" is really "dipeptides are harder"; it
   carries no evidence about proteins, nucleic acids, or ligands.
 - **Pairs cluster by molecule and the intervals do not account for it.** The design
-  effect is about 2 (ICC 0.10-0.13), so the ORB and MACE intervals should be about
-  1.4x wider than quoted. The held-out Wilson intervals are worse off (design
-  effect 3.4–5.2); compound-clustered intervals are given beside that table. No conclusion changes — the model differences are far
+  effect is about 2 (ICC about 0.10), so the ORB and MACE intervals should be about
+  1.4x wider than quoted (`scripts/intervals.py`). The held-out Wilson intervals are worse off (design
+  effect 3.5–5.4); compound-clustered intervals are given beside that table. No conclusion changes — the model differences are far
   larger than that — but the CIs as printed are optimistic.
 - **A conformer pair is a proxy for a chemical decision.** It is the cheapest
   honest proxy — same molecule, real quantum energies, thousands of examples — but
