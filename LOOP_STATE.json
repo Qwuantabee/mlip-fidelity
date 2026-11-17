@@ -1,0 +1,36 @@
+{
+  "project": "mlip-fidelity",
+  "repo": "https://github.com/Qwuantabee/mlip-fidelity",
+  "status": "COMPLETE 2026-11-15 06:55 CT",
+  "step": 99,
+  "step_name": "DONE",
+  "result": {
+    "question": "Do universal MLIPs preserve the chemical decision (which of two near-degenerate conformers is lower) even when their energy MAE is tiny?",
+    "data": "SPICE 1.1.4, 16089 decision pairs from 1588 molecules, sub-1 kcal/mol, 404 charged molecules with SMILES-parsed charge/spin",
+    "published": {
+      "orb_orbmol_v1_conservative": "0.900 (0.895-0.905) n=15991, median err 0.15 kcal, null p 0.005",
+      "mace_off_small": "0.747 (0.740-0.753) n=15717, median err 0.45 kcal, null p 0.005",
+      "rdkit_mmff": "0.563 (0.555-0.571) n=15578, median err 31.7 kcal, null p 0.005",
+      "bio_slice": "ORB 0.855, MACE 0.636"
+    },
+    "headline": "Energy error does not predict decision quality: the classical baseline has 206x the best model's error yet still orders 56% correctly, and the best model still reverses 10% of near-degenerate pairs."
+  },
+  "verification": [
+    "Every published row recomputes exactly from its committed decisions CSV (decision_scores).",
+    "ORB raw covers 15232/15232 conformers, 0 missing, 0 NaN.",
+    "44 tests pass, including tests/test_readme_claims.py which parses the README table cells.",
+    "GitHub Actions green on the final commit.",
+    "Six figures each passed a vision QA pass; every defect it found was fixed at the cause."
+  ],
+  "defects_found_and_fixed": [
+    "SPICE conformations are BOHR; treated as Angstrom gave chance-level accuracy (0.489 -> 0.747 once fixed).",
+    "SPICE layout guessed wrong (stacked conformations, not per-conformer groups).",
+    "Charged molecules were silently run neutral; now SMILES-parsed with an RDKit-free fallback.",
+    "Round-to-6dp flipped the sign of 28 near-zero MMFF gaps, making CSV and summary disagree.",
+    "A stale 1500-conformer ORB artefact produced a published 0.893 that did not reproduce; withdrawn, re-run, re-published as 0.900.",
+    "Overlapping chunk ranges double-counted 2400 conformers; merge now dedupes by id.",
+    "Licences were guessed wrong (ORB is Apache-2.0, not ASL; MACE is MIT code + ASL weights)."
+  ],
+  "next_action": "none. Optional future work is listed in the README limits (CCSD(T) reference, reaction energies instead of conformer pairs, per-assay clustered CIs).",
+  "checked_at": "2026-11-15T06:18:58-06:00"
+}
