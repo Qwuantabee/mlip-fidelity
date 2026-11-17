@@ -4,7 +4,9 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Qwuantabee/mlip-fidelity/blob/master/LICENSE)
 [![python](https://img.shields.io/badge/python-3.12-blue.svg)](https://github.com/Qwuantabee/mlip-fidelity/blob/master/pyproject.toml)
 
-**On sub-kcal/mol conformer pairs, sign accuracy is a steep and predictable function of pair-gap error: a median error of 0.15 kcal/mol gets 90% of orderings right, 0.45 gets 76%, and 1.61 gets 60%. Error does predict the decision — but only if you compare it to the gap you are trying to resolve, not to a leaderboard MAE.**
+**Three energy models were asked, 16,089 times, which of two near-degenerate conformers is lower in energy (quantum reference gap under 1 kcal/mol). ORB-omol got 90.0% right, MACE-OFF23 76.0% and the classical MMFF94 force field 60.1%; always guessing the same way scores 53.4%. Accuracy falls as a model's pair-gap error rises (median 0.15 / 0.45 / 1.61 kcal/mol), so an energy error only means something next to the gap it has to resolve, not as a leaderboard MAE.**
+
+**The caveat that governs those numbers: ORB-omol and MACE-OFF23 were both trained on the dataset the pairs come from (SPICE), so two of the three figures are in-sample.** On a second dataset with a higher-level reference (Folmsbee, 22,379 pairs) the ordering is the same, 0.833 / 0.773 / 0.622, but that test does not isolate how much of the in-sample figures is memorisation; see [the held-out test](#the-held-out-test-does-any-of-this-survive-outside-the-training-data).
 
 ![Decision accuracy vs gap error](figures/fidelity_vs_error.png)
 
@@ -28,20 +30,39 @@ lower?* Score the sign. Compare that to the model's own energy error.
 
 ## The result
 
+**Read this table as an in-sample measurement.** Two of the three models trained
+on SPICE — MACE-OFF23 on ~95% of v1, ORB-omol via OMol25's documented SPICE2 — so
+their rows are fidelity to their own training data, not generalisation. Only
+MMFF94 is a clean row.
+
 | model | licence | scored conformers | decided pairs | **decision accuracy** (95% CI) | median \|ΔE\| error | null control p |
 |---|---|---|---|---|---|---|
 | **ORB-omol v1 (conservative)** | Apache-2.0 | 15,232 | 15,991 | **0.900** (0.895–0.905) | 0.15 kcal/mol | < 0.005 |
 | MACE-OFF23 (small) | weights ASL, **non-commercial**; code MIT | 14,913 | 15,717 | **0.760** (0.753–0.766) | 0.45 kcal/mol | < 0.005 |
 | MMFF94 (classical force field) | BSD | 14,763 | 15,578 | 0.601 (0.594–0.609) | 1.61 kcal/mol | < 0.005 |
 
-**Read this table as an in-sample measurement.** Two of the three models trained
-on SPICE — MACE-OFF23 on ~95% of v1, ORB-omol via OMol25's documented SPICE2 — so
-these numbers are fidelity to their own training data, not generalisation. The
-held-out test further down is where generalisation is measured: out of sample the
-order is unchanged (ORB > MACE > MMFF94), but ORB's lead over MACE shrinks from 14
-to 6 points. Only MMFF94 was ever a clean row. The intervals are Wilson intervals
-(about 1.4x too narrow once pairs are clustered by molecule, see Limits), and the
-null-control p is the floor 200 shuffles can report (1/201), not a measured value.
+How to read the columns:
+
+- **Ties are excluded, and counted.** A pair whose reference gap is within 0.01
+  kcal/mol is a tie and is not scored: 98 pairs for ORB-omol and MACE-OFF23, 97
+  for MMFF94. A pair containing a conformer the model could not evaluate is not
+  scored either: 0 for ORB-omol, 274 for MACE-OFF23, 414 for MMFF94. "Decided
+  pairs" is what is left of the 16,089. A model gap of exactly zero is *not* a
+  tie: it is scored as wrong (121 ORB-omol pairs, 82 MACE-OFF23; see Limits).
+- **The intervals** are Wilson intervals over pairs. Pairs from one molecule are
+  not independent, so for ORB-omol and MACE-OFF23 they are about 1.4x too narrow
+  (see Limits). The 1,588 molecules are the independent units.
+- **The null-control p** is the floor 200 shuffles can report (1/201), not a
+  measured value.
+- **Run-to-run noise.** ORB-omol's GPU energies are not bit-reproducible. On the
+  held-out set, where it was measured, re-running moved ORB-omol's accuracy by
+  0.001 to 0.004 (details in the held-out section); it was not re-measured on
+  SPICE. Every gap between models in this table is 0.14 or more, about forty
+  times the larger of those figures. MACE-OFF23 flipped no decision across re-runs and MMFF94, on the
+  CPU, was bit-identical.
+- **Out of sample** the order is unchanged (ORB > MACE > MMFF94) and ORB's lead
+  over MACE is 6 points instead of 14; the held-out section says what that does
+  and does not show.
 
 All three rows are recomputed from the committed `results/decisions_*.csv` by
 `scripts/score.py`, and a model only appears here if
@@ -54,7 +75,7 @@ Four things worth taking from that table.
    error is 0.45 kcal/mol, and the pairs it is being asked about have a median
    true gap of only 0.55 kcal/mol (5th-95th percentile: 0.09-0.95). An error the
    size of the gap means a coin flip on the small ones, which is why it reverses
-   25%.
+   24%.
 
 2. **The best model is still wrong one time in ten.** ORB-omol's median error is
    0.15 kcal/mol and 0.900 accuracy means 1,596 wrong orderings out of 15,991. If
@@ -62,7 +83,7 @@ Four things worth taking from that table.
    swapped pairs.
 
 3. **Accuracy tracks error, and the ordering is unambiguous.** With the classical
-   baseline's units corrected (see "What went wrong"), the three models are
+   baseline's units corrected (see [the defect trail](docs/DEFECT_TRAIL.md)), the three models are
    monotone in *every* error measure: median gap error 0.15 / 0.45 / 1.61 kcal/mol
    gives accuracy 0.900 / 0.760 / 0.601. Pairwise differences are robust to
    clustering by molecule — on the 15,578 pairs all three models scored, with a
@@ -103,8 +124,20 @@ them on — MACE-OFF23 on ~95% of SPICE v1, ORB-omol's OMol25 documenting SPICE2
 So the table above measures **fidelity to their own training data**. Only MMFF94
 was ever a clean row.
 
-So I scored all three on two genuinely held-out sets. Both are compared on the
-slice where they overlap with SPICE: reference gaps under 1 kcal/mol.
+So I scored all three on two sets from outside SPICE. "Held out" here means a
+different dataset: whether individual Folmsbee or MPCONF196 molecules also occur
+in SPICE or in OMol25 was not checked. Both are compared on the slice where they
+overlap with SPICE: reference gaps under 1 kcal/mol.
+
+**What this test can and cannot say, up front.** It shows the ranking of the
+three models survives a change of dataset and of reference method. It does *not*
+separate training-set contamination from difficulty. The only uncontaminated
+model, MMFF94, is used as the difficulty control, and it is a poor one: its
+accuracy barely depends on the size of the gap, while both ML models' accuracy
+depends on it steeply, and Folmsbee's pairs are much closer to ties (median
+reference gap 0.24 kcal/mol against SPICE's 0.55). At equal gap size all three
+models, ORB-omol included, score *higher* on Folmsbee than on SPICE. No
+inflation from contamination is demonstrated for either ML model.
 
 | benchmark | compounds | sub-kcal pairs | reference |
 |---|---|---|---|
@@ -115,11 +148,22 @@ slice where they overlap with SPICE: reference gaps under 1 kcal/mol.
 
 ![In-sample vs held out](figures/heldout.png)
 
-| model | SPICE (in-sample) | **Folmsbee held out** | shift | beyond difficulty |
-|---|---|---|---|---|
-| ORB-omol v1 | 0.900 | **0.833** (0.828–0.837) | −0.068 | **−0.089** |
-| MACE-OFF23 | 0.760 | **0.773** (0.768–0.779) | +0.013 | **−0.008** |
-| MMFF94 | 0.601 | **0.622** (0.616–0.629) | +0.021 | — (control) |
+*Left: accuracy on each dataset. Right: each model's shift minus MMFF94's. The
+right panel is an estimate under an assumption that does not hold (see "Accuracy
+at equal gap size"); it is not a measured contamination effect.*
+
+| model | SPICE (in-sample) | **Folmsbee held out** | shift | shift minus MMFF94's | Folmsbee, ties excluded (decided pairs) |
+|---|---|---|---|---|---|
+| ORB-omol v1 | 0.900 | **0.833** (0.828–0.837) | −0.068 | −0.089 | 0.840 (21,812) |
+| MACE-OFF23 | 0.760 | **0.773** (0.768–0.779) | +0.013 | −0.008 | 0.780 (21,812) |
+| MMFF94 | 0.601 | **0.622** (0.616–0.629) | +0.021 | — (control) | 0.624 (21,377) |
+
+The bold column scores every sub-kcal Folmsbee pair, near-ties included, while
+the SPICE column excludes ties, so the "shift" columns mix two definitions. The
+last column is the like-for-like figure (567 ties excluded for the ML models, 553
+for MMFF94); on that basis the shifts are −0.060 / +0.020 / +0.023. The "shift
+minus MMFF94's" column is a difference of raw shifts, not a measured
+contamination effect: see the gap-size table below before quoting it.
 
 **Correction (review R2, 2026-11-16).** The first version of this table ran the
 74 charged Folmsbee compounds (1,943 of the 22,379 pairs; +1: 60, −1: 10, +2: 4)
@@ -145,7 +189,8 @@ harness's. On the full set the two committed ORB-omol runs saw identical neutral
 inputs and disagree on 187 of those 20,436 decisions (0.92%; largest gap change
 0.040 kcal/mol): a net 27 decisions, 0.0012 of the 22,379-pair accuracy, which is
 why a predicted 0.834 came out 0.833. **So ORB-omol's 0.833 carries an error bar
-of about ±0.0012.** The 0.823 → 0.833 step (+0.0095, 7.9× that) survives it: it
+of about ±0.0012** (one pair of full-set runs, so itself an estimate; the
+three-run sample above spread 0.0036 on a tenth of the pairs). The 0.823 → 0.833 step (+0.0095, 7.9× that) survives it: it
 is +0.0107 from the charged pairs, whose inputs changed (a net 240 decisions,
 where noise could move at most 19), less 0.0012 of noise on the neutral ones.
 
@@ -157,31 +202,59 @@ counts every sub-kcal pair, including 567 near-ties (|gap| ≤ 0.01 kcal/mol; 55
 for MMFF94) that the SPICE column excludes; with ties excluded the held-out
 figures are 0.840 / 0.780 / 0.624.
 
-MMFF94 has never seen either dataset, so I use its +0.021 as an estimate of how
-much easier this held-out slice is, and subtract it. That is an assumption, not a
-measurement: it treats slice difficulty as the same for every model. Intervals
-below resample SPICE molecules and Folmsbee compounds independently (4,000 draws).
+#### Accuracy at equal gap size
 
-- **ORB-omol loses about 9 points beyond difficulty** (−0.089, 95% CI −0.107 to
-  −0.070) — consistent with in-sample inflation and with OMol25's documented
-  inclusion of SPICE2.
-- **MACE-OFF23: no inflation detected** (−0.008, 95% CI −0.027 to +0.012). That
-  is absence of evidence, not evidence of absence: with a standard error of
-  0.010 this design can only detect an inflation larger than about 0.03 at 80%
-  power.
+Decision accuracy by size of the reference gap, SPICE (in-sample) against
+Folmsbee, from `scripts/reconcile_heldout.py` (block H3; ties included in the
+first bin):
 
-The difficulty offset is the weak link. Folmsbee's sub-kcal pairs sit much closer
-to ties than SPICE's, ML accuracy rises steeply with the gap while MMFF94's is
-nearly flat, MMFF94 scores a different pair set, and the reference level changes
-from ωB97M-D3(BJ) (MACE-OFF23's training level) to DLPNO-CCSD(T). A reviewer
-showed that equally defensible re-specifications (gap-matched, or restricted to
-MACE-OFF23's own training domain) push MACE-OFF23's figure to either side of
-zero, so its size is not identified.
+| reference gap (kcal/mol) | ORB-omol SPICE → Folmsbee | MACE-OFF23 SPICE → Folmsbee | MMFF94 SPICE → Folmsbee |
+|---|---|---|---|
+| 0 – 0.1 | 0.595 → 0.623 | 0.533 → 0.595 | 0.513 → 0.537 |
+| 0.1 – 0.25 | 0.764 → 0.821 | 0.623 → 0.769 | 0.515 → 0.606 |
+| 0.25 – 0.5 | 0.894 → 0.924 | 0.733 → 0.843 | 0.595 → 0.661 |
+| 0.5 – 0.75 | 0.938 → 0.963 | 0.800 → 0.888 | 0.613 → 0.699 |
+| 0.75 – 1.0 | 0.980 → 0.983 | 0.845 → 0.902 | 0.648 → 0.677 |
 
-The gap bins cannot separate the two either. In the 0.1–0.25 kcal/mol bin MACE
-scores 0.769 on Folmsbee against 0.623 on SPICE — but MMFF94, which trained on
-neither set, also scores higher on Folmsbee in every bin (0.606 vs 0.515 in the
-same one).
+Every model is more accurate on Folmsbee in every bin. ORB-omol's lower overall
+figure (0.833 against 0.900) is therefore a composition effect: 5,488 of
+Folmsbee's 22,379 pairs (24.5%) have a gap under 0.1 kcal/mol, against 922 of
+SPICE's 16,089 (5.7%), and those are the pairs every model gets wrong most
+often. Reweighting Folmsbee's five bins to SPICE's gap distribution (ties
+excluded on both sides, as in the SPICE table) gives ORB-omol 0.924, MACE-OFF23
+0.851 and MMFF94 0.663, which is +0.024 / +0.091 / +0.062 against their SPICE
+figures; `tests/test_readme_secondary_claims.py` recomputes it. Why Folmsbee is easier at equal gap is not
+established; it differs from SPICE in at least three ways at once (relaxed minima
+instead of MD snapshots, a DLPNO-CCSD(T) reference instead of the DFT level the
+models were fitted near, and no ion pairs or dipeptides).
+
+#### The MMFF94-offset estimate, and why it is not a contamination measurement
+
+MMFF94 has never seen either dataset, so one can take its +0.021 as an estimate
+of how much easier the held-out slice is, and subtract it from each ML model's
+raw shift. That treats slice difficulty as the same for every model, which the
+gap-size table shows is false. Intervals resample SPICE molecules and Folmsbee
+compounds independently (4,000 draws).
+
+- **ORB-omol: −0.089** (95% CI −0.107 to −0.070) on that estimate. An earlier
+  version of this README read it as "ORB-omol loses about 9 points beyond
+  difficulty, consistent with in-sample inflation". That reading is withdrawn:
+  the interval covers sampling error only, and the sign of the effect reverses
+  once gap size is matched (+0.024 on its own, −0.038 relative to MMFF94's
+  gap-matched +0.062). The data are consistent with some inflation and with none.
+- **MACE-OFF23: −0.008** (95% CI −0.027 to +0.012); gap-matched it is +0.091.
+  No inflation detected, which is absence of evidence, not evidence of absence.
+
+The offset is the weak link for both models, for the same reasons: Folmsbee's
+sub-kcal pairs sit much closer to ties than SPICE's, ML accuracy rises steeply
+with the gap while MMFF94's is nearly flat, MMFF94 scores a different pair set,
+and the reference level changes from DFT (ωB97M-D3(BJ) for SPICE and for
+MACE-OFF23's training labels) to DLPNO-CCSD(T). Matching on gap size, an
+equally defensible specification, moves both figures by more than their
+intervals (ORB-omol −0.089 → −0.038, MACE-OFF23 −0.008 → +0.029, each relative
+to MMFF94), so neither is identified. An
+experiment that could identify it needs the same molecules scored by a model
+before and after they enter its training set, which this repo does not have.
 
 **The MPCONF196 result I published earlier is withdrawn.** I reported that
 MACE's sub-kcal accuracy "collapses out of sample, 0.760 → 0.467, p = 0.0008."
@@ -204,10 +277,13 @@ but a size effect is not needed to explain these 30 pairs.
 
 ### What this leaves standing
 
-On 22,379 genuinely unseen sub-kcal pairs, **ORB-omol still orders near-degenerate
-conformers at 0.833 against MMFF94's 0.622** — an ML potential does beat a force
-field out of sample, just by about 21 points rather than the 30 the in-sample
-table implied. That is the defensible claim.
+On 22,379 sub-kcal pairs from a dataset outside SPICE, **ORB-omol still orders near-degenerate conformers at 0.833 against MMFF94's
+0.622** — an ML potential does beat a force field outside SPICE, by about 21
+points on Folmsbee's own mix of gap sizes against 30 in-sample. Most of that
+difference is the gap mix rather than the dataset: at SPICE's gap distribution
+the Folmsbee margin is 26 points. That the ranking ORB > MACE > MMFF94 holds on
+both datasets is the defensible claim. How much of either ML model's in-sample
+accuracy is memorisation is not measured here.
 
 ## Why the null control matters
 
@@ -280,56 +356,26 @@ not at import. A shared environment produces wrong numbers, quietly.
 
 ## What went wrong on the way (kept on purpose)
 
-This section exists because a repo that only shows its successes teaches the
-reader nothing about how far to trust it.
+Six defects changed or withdrew a published number or broke a guard on one.
+Regression tests for them are in `tests/`. Full account: [`docs/DEFECT_TRAIL.md`](docs/DEFECT_TRAIL.md).
 
-**1. A unit bug that made the first result meaningless.** The first full sweep said
-MACE ranked sub-kcal pairs at chance: accuracy 0.489, null p = 0.58. The pipeline
-was wrong, not the model — **SPICE stores conformations in Bohr**, and they were
-being handed to ASE as Ångström, stretching every molecule by 1.89×. With the
-conversion applied and nothing else changed, accuracy went 0.489 → 0.723.
-
-**2. A withdrawn number.** An earlier revision of this README reported ORB-omol v1
-at 0.893. That row had been scored from an artefact holding 1,500 conformers
-while claiming 9,409 decided pairs. It was withdrawn rather than patched, and has
-now been re-measured in full: the complete sweep gives **0.900 on 15,991 decided
-pairs**, from an artefact that covers all 15,232 conformers. The pre-fix number
-and the post-fix number are close, which is luck, not vindication — the first one
-was not reproducible and should never have been published.
-
-**3. A chunk cache that silently corrupted every result.** Chunk files were named
-by chunk *index*. Two sweeps with different `--chunk` sizes — one launched by a
-stale wrapper script that bypassed the shell-level lock — wrote into the same
-slots, so a 600-conformer chunk was resumed as if it were a 1,500-conformer slice.
-Merged artefacts reported `ok` while holding **1,200 duplicated and 6,232 missing
-conformers**, and every published accuracy was computed from that. Three fixes,
-each with a test that failed first: chunk cache keys now encode the *slice*, a
-cached chunk is refused unless its ids match the requested slice exactly, and the
-lock moved from the wrapper into `run_sweep.py` itself so no launcher can bypass
-it.
-
-**4. A failure count that under-reported missing data by 4.5×.** Per-chunk failure
-lists are truncated to 10 entries for payload size; the merge summed those
-truncated lengths, so a run with 319 NaN conformers reported `n_failed=70`. Each
-chunk now carries its own true count.
-
-**5. A completeness gate that was a hand-edited claim.** `sweep_complete.json` was
-written by hand, which let a model be marked complete while its artefact was
-partial. It is now recomputed from the raw artefacts by
-`scripts/verify_completeness.py`, and `score.py --require-complete` will emit no
-rows at all rather than quietly partial ones.
-
-Earlier finds are also recorded with tests: an HDF5 reader that guessed the layout
-wrong (the inventory returning *zero* multi-conformer molecules is what exposed
-it), a classical baseline that "succeeded" with no bonds at all in the molecule,
-a silent neutral-charge fallback, and a licence table that called MACE's
-non-commercial weights permissive after a rewording.
+| defect | effect on the published number |
+|---|---|
+| SPICE coordinates are Bohr, were read as Ångström | MACE-OFF23 scored at chance, 0.489; 0.723 once converted |
+| ORB-omol row scored from a 1,500-conformer artefact | 0.893 withdrawn; full re-run gives 0.900 on 15,991 pairs |
+| Chunk cache keyed by index, not by slice | merged artefacts had 1,200 duplicated and 6,232 missing conformers |
+| Failure counts summed from truncated lists | a run with 319 failed conformers reported 70 |
+| MMFF94 energies stored as eV, are kcal/mol | MMFF94 error inflated 23x; an "error does not predict accuracy" headline was refuted and removed |
+| Completeness gate was a hand-edited file | now recomputed from raw artefacts; scoring refuses partial sweeps |
 
 ## Limits, stated plainly
 
 - **SPICE is ωB97M-D3(BJ), not CCSD(T).** At sub-kcal gaps the reference itself carries
   error; a "wrong" decision within ~0.2 kcal/mol should be read as
-  indistinguishable from reference noise, not as a model failure.
+  indistinguishable from reference noise, not as a model failure. ORB-omol's
+  training labels (OMol25) are ωB97M-V/def2-TZVPD, a neighbouring but different
+  level of theory, so part of its residual is method difference rather than
+  model error.
 - **Two of the three rows are train/test contaminated, and I only found out after
   publishing.** This is the single biggest caveat in the table and a reviewer had
   to point it out:
@@ -342,7 +388,9 @@ non-commercial weights permissive after a rewording.
   - **MMFF94** is the only clean out-of-sample row.
   - Read the ML accuracies as *fidelity to their own training data*, not as
     generalisation. The held-out test above (Folmsbee, with MPCONF196 as a small
-    check) is the experiment that addresses this; TorsionNet206 has not been run.
+    check) shows the ranking survives outside SPICE; it does not measure how
+    large the in-sample inflation is, because it has no valid difficulty
+    control. TorsionNet206 has not been run.
 - **Not every pair is a conformer pair, and the wording above overstates it.**
   3,149 of 16,089 pairs (19.6%) come from multi-component systems: the DES370K
   subset is hydrogen-bonded **dimers** (`C=C.[Na+]`), so those pairs are
@@ -417,6 +465,8 @@ scripts/run_sweep.py           chunked, resumable, per-model venv dispatch, lock
 scripts/verify_completeness.py recomputes which models cover every conformer
 scripts/score.py               sign agreement, error stats, null control
 scripts/make_figures.py        seven figures, every number read from a CSV
+scripts/reconcile_heldout.py   held-out checks: clustered intervals, accuracy by gap size
+docs/DEFECT_TRAIL.md           the wrong numbers found on the way, and their fixes
 tests/                         tests: units, sign convention, null, layout, cache
 ```
 
