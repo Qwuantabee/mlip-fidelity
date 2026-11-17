@@ -33,6 +33,6 @@
       "multi_conformer": 677
     }
   },
-  "archive": "/home/ubuntu/biotech-portfolio/_data/SPICE-1.1.4.hdf5",
+  "archive": "SPICE-1.1.4.hdf5",
   "note": "counts from the first 19238 molecules, not the whole archive"
 }

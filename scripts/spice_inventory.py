@@ -32,7 +32,7 @@ def main() -> int:
 
     sample = args.sample or 10 ** 9
     inv = inventory(args.archive, sample=sample)
-    inv["archive"] = str(args.archive)
+    inv["archive"] = Path(args.archive).name   # bare filename, as in build_pairs.py
     inv["note"] = ("counts from the first %d molecules, not the whole archive"
                    % inv["n_sampled"])
     out = Path(args.out)

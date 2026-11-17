@@ -1,6 +1,6 @@
 {
  "seed": 0,
- "archive": "/home/ubuntu/biotech-portfolio/_data/SPICE-1.1.4.hdf5",
+ "archive": "SPICE-1.1.4.hdf5",
  "units": {
   "positions": "angstrom",
   "source_positions": "bohr",

@@ -181,7 +181,7 @@ def main() -> int:
 
     manifest = {
         "seed": args.seed,
-        "archive": str(args.archive),
+        "archive": Path(args.archive).name,   # bare filename: no author-machine path in a committed artefact
         "units": {"positions": "angstrom", "source_positions": "bohr",
                   "bohr2ang": BOHR2ANG, "energy": "hartree",
                   "qm_gap": "kcal/mol = (E_B - E_A) * 627.5094740631"},
