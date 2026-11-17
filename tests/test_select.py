@@ -124,3 +124,32 @@ def test_odd_electron_count_raises_multiplicity():
     assert (charge, spin) == (0, 2)
     charge, spin = charge_and_multiplicity("[CH3+]", [6, 1, 1, 1])
     assert (charge, spin) == (1, 1)
+
+
+def test_missing_smiles_raises_instead_of_guessing_neutral():
+    """No SMILES means no charge is readable, so it must not default to neutral.
+
+    The old behaviour returned (0, 1) for '', None and whitespace. That is the same
+    silent-neutral class of defect that ran 74 charged Folmsbee compounds as neutral
+    and cost ORB 0.127 of accuracy on those pairs (0.668 -> 0.795). Measured on SPICE
+    1.1.4: 19,238 molecules carry a SMILES and 0 are blank, so raising here cannot
+    move any published number - and if a future archive has blanks, the build stops
+    instead of quietly scoring ions as neutrals.
+
+    A caller that has decided how to handle the gap must say so explicitly with
+    on_missing="count", and the builder records that count in its manifest.
+    """
+    import pytest
+
+    from mlipfid.select import MissingSmilesError
+
+    for bad in ("", "   ", None):
+        with pytest.raises(MissingSmilesError):
+            charge_and_multiplicity(bad, [7, 1, 1, 1])
+
+    # the explicit opt-out still returns a neutral, and only when asked for
+    assert charge_and_multiplicity(None, [7, 1, 1, 1], on_missing="count") == (0, 1)
+
+    # an UNPARSEABLE but non-empty SMILES is a different case: its bracket text
+    # still carries the charge (F9), so it must not raise.
+    assert charge_and_multiplicity("[NH4+]C((", [7, 1, 1, 1, 1, 6])[0] == 1

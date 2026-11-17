@@ -107,6 +107,11 @@ def main() -> int:
     n_mol = 0
     n_skipped = 0
     n_charged = 0
+    # Molecules whose SMILES is absent, so no charge could be read. The builder
+    # chooses to COUNT rather than guess neutral: the number goes into the manifest
+    # and the run summary, so a conformer run as neutral is never invisible. Measured
+    # on SPICE 1.1.4: 0 of 19,238 molecules hit this path.
+    n_missing_smiles = 0
     cap = args.max_conformers_per_molecule
 
     with h5py.File(args.archive, "r") as f:
@@ -123,7 +128,10 @@ def main() -> int:
                     n_skipped += 1
                     continue
                 charge, spin = charge_and_multiplicity(
-                    mol.smiles, mol.conformers[0].atomic_numbers)
+                    mol.smiles, mol.conformers[0].atomic_numbers,
+                    on_missing="count")
+                if mol.smiles is None or not str(mol.smiles).strip():
+                    n_missing_smiles += 1
                 if charge != 0:
                     n_charged += 1
                 local = pairs_from_molecule(
@@ -181,6 +189,7 @@ def main() -> int:
         "n_molecules_with_pairs": sum(d["molecules"] for d in per_subset.values()),
         "n_molecules_skipped": n_skipped,
         "n_charged_molecules": n_charged,
+        "n_missing_smiles": n_missing_smiles,
         "n_pairs": len(pairs),
         "n_conformers": len(conformers),
         "n_bio_pairs": sum(1 for p in pairs if p["is_bio"]),
@@ -200,6 +209,8 @@ def main() -> int:
     print(f"conformers exported : {len(conformers)}")
     print(f"decision pairs      : {len(pairs)} (bio {manifest['n_bio_pairs']})")
     print(f"charged molecules   : {n_charged}")
+    print(f"molecules with no SMILES (charge unreadable, run neutral): "
+          f"{n_missing_smiles}")
     for s, dd in sorted(per_subset.items(), key=lambda kv: -kv[1]["pairs"]):
         print(f"  {s:24s} mol={dd['molecules']:5d} pairs={dd['pairs']:6d} "
               f"conf={dd['conformers']:6d} charged={dd['charged_molecules']:4d}")

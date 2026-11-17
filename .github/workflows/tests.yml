@@ -26,3 +26,10 @@ jobs:
         # QM gap from conformers.jsonl, and summary.csv from the CSVs; exits 1 on
         # any disagreement. Scope: see the docstring of scripts/check_artefacts.py.
         run: python scripts/check_artefacts.py
+      - name: Completeness checks
+        # Exits 1 on missing ids, an all-NaN or all-zero energy block, n_ok/n_failed
+        # disagreeing with the id count, or finite-energy coverage below 0.95. It was
+        # added in the round-2 repair but never wired in, so it only ran when someone
+        # remembered - the guard existed and could not fire on a push. It passes on
+        # the committed artefacts, so this cannot make CI red on an untouched tree.
+        run: python scripts/verify_completeness.py

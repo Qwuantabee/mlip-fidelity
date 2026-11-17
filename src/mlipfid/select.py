@@ -91,13 +91,38 @@ def _charge_from_smiles_text(smiles: str) -> int:
     return total
 
 
-def charge_and_multiplicity(smiles: str | None, atomic_numbers) -> tuple[int, int]:
+class MissingSmilesError(ValueError):
+    """A molecule carries no SMILES, so there is no formal charge to read.
+
+    Raised rather than guessing neutral. Guessing is exactly the defect that made
+    ORB score 0.668 instead of 0.795 on 74 charged held-out compounds: a molecule
+    ran as neutral because its charge had silently defaulted. A caller that has
+    decided how to handle the gap must say so with on_missing="count".
+    """
+
+
+def charge_and_multiplicity(smiles: str | None, atomic_numbers,
+                            *, on_missing: str = "raise") -> tuple[int, int]:
     """Formal charge and spin multiplicity from a SMILES, without trusting it blindly.
 
-    Returns (charge, spin). If RDKit cannot parse the SMILES it falls back to
-    (0, 1) so a molecule is not silently dropped, but the caller records that it
-    happened so a results table can show how many conformers were run neutral.
+    Returns (charge, spin). TWO kinds of unusable input are treated differently:
+
+    * An EMPTY or absent SMILES has no charge to read at all. Default is to raise
+      MissingSmilesError; a caller that has measured the gap passes
+      on_missing="count" and records how many molecules were affected, so the
+      number appears in a results table instead of being an invisible default.
+      Measured on SPICE 1.1.4: 19,238 molecules carry a SMILES, 0 are blank, so
+      the raise path is what actually runs.
+    * An UNPARSEABLE SMILES (non-empty, RDKit returns None) still resolves the
+      charge from its bracket text - that is reviewer F9, and treating it as
+      'no charge' would run every malformed ion as a neutral.
     """
+    if smiles is None or not str(smiles).strip():
+        if on_missing == "count":
+            return 0, 1
+        raise MissingSmilesError(
+            "molecule has no SMILES, so its formal charge cannot be read; pass "
+            "on_missing='count' only if the caller records the gap")
     z = np.asarray(atomic_numbers, dtype=int)
     n_electrons = int(z.sum())
     charge = 0
